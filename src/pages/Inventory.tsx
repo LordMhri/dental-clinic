@@ -10,7 +10,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
 } from 'lucide-react'
-import { suppliers as seedSuppliers } from '../data/mock'
+import { inventory as seedInventory, stockMovements as seedMoves, suppliers as seedSuppliers } from '../data/mock'
 import { Avatar } from '../components/ui/Avatar'
 import { Modal, ModalHeader } from '../components/ui/Modal'
 import { useClinic } from '../context/ClinicContext'
@@ -44,13 +44,31 @@ interface ApiStockMovement {
 
 export function Inventory() {
   const { notify, token } = useClinic()
-  const [items, setItems] = useState<ApiInventoryItem[]>([])
-  const [moves, setMoves] = useState<ApiStockMovement[]>([])
+  const [items, setItems] = useState<ApiInventoryItem[]>(() =>
+    seedInventory.map((i) => ({
+      ...i,
+      unitCost: 0,
+      expiry: i.expiry ?? null,
+      status: i.qty <= 0 ? 'Out of Stock' : i.qty <= i.minQty ? 'Low Stock' : 'In Stock',
+      supplier: { id: 'sup-1', name: i.supplier },
+    }))
+  )
+  const [moves, setMoves] = useState<ApiStockMovement[]>(() =>
+    seedMoves.map((m, idx) => ({
+      id: `sm-${idx}`,
+      itemId: 'inv-1',
+      type: m.type,
+      qty: m.qty,
+      createdAt: m.at,
+      item: { id: 'inv-1', name: m.itemName, sku: 'SKU', unit: 'units' },
+      staff: { id: 'st-1', name: m.user },
+    }))
+  )
   const [supplierList] = useState(seedSuppliers)
 
   const [updateOpen, setUpdateOpen] = useState(false)
   const [suppliersOpen, setSuppliersOpen] = useState(false)
-  const [selectedId, setSelectedId] = useState('')
+  const [selectedId, setSelectedId] = useState(seedInventory[0]?.id || '')
   const [adjustType, setAdjustType] = useState<'Restock' | 'Dispensed'>('Restock')
   const [qtyDelta, setQtyDelta] = useState('10')
   const [reason, setReason] = useState('')

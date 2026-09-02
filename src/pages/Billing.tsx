@@ -59,6 +59,20 @@ export function Billing() {
 
   async function handleOpenDrawer() {
     setSubmittingDrawer(true)
+    if (!token) {
+      setDrawerSession({
+        id: 'cds-demo',
+        date: 'Aug 12, 2026',
+        status: 'Open',
+        openingCash: Number(openingCashInput) || 5000,
+        expectedCash: Number(openingCashInput) || 5000,
+        cashier: { id: 'st-1', name: 'Reception' },
+      })
+      setOpenDrawerModal(false)
+      notify(`Cash drawer opened with ${etb(Number(openingCashInput) || 5000)}.`)
+      setSubmittingDrawer(false)
+      return
+    }
     try {
       const res = await fetch('/api/billing/cash-drawer/open', {
         method: 'POST',
@@ -89,6 +103,22 @@ export function Billing() {
 
   async function handleCloseDrawer() {
     setSubmittingDrawer(true)
+    if (!token) {
+      setDrawerSession({
+        id: 'cds-demo',
+        date: 'Aug 12, 2026',
+        status: 'Closed',
+        openingCash: drawerSession?.openingCash || 5000,
+        expectedCash: drawerSession?.expectedCash || 5000,
+        countedCash: Number(countedCashInput) || 0,
+        discrepancy: discrepancyPreview,
+        cashier: { id: 'st-1', name: 'Reception' },
+      })
+      setCloseDrawerModal(false)
+      notify(`Register closed. Discrepancy: ${etb(discrepancyPreview)}.`)
+      setSubmittingDrawer(false)
+      return
+    }
     try {
       const res = await fetch('/api/billing/cash-drawer/close', {
         method: 'POST',
