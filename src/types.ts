@@ -51,6 +51,7 @@ export interface Appointment {
   id: string
   patientId: string
   dentistId: string
+  operatoryId?: string
   date: string
   time: string
   endTime: string
@@ -60,6 +61,9 @@ export interface Appointment {
   status: AppointmentStatus
   notes?: string
   emergency?: boolean
+  patient?: { id: string; name: string; phone?: string; allergy?: string }
+  dentist?: { id: string; name: string; role?: string }
+  operatory?: { id: string; name: string; type?: string }
 }
 
 export interface Invoice {

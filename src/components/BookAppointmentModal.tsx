@@ -10,6 +10,7 @@ export function BookAppointmentModal() {
   const { bookOpen, setBookOpen, patients, bookAppointment, notify } = useClinic()
   const [query, setQuery] = useState('')
   const [patientId, setPatientId] = useState('')
+  const [operatoryId, setOperatoryId] = useState('op-1')
   const [date, setDate] = useState('2026-08-12')
   const [dentistId, setDentistId] = useState('')
   const [time, setTime] = useState('')
@@ -17,6 +18,7 @@ export function BookAppointmentModal() {
   const [emergency, setEmergency] = useState(false)
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const matches = useMemo(() => {
     const q = query.toLowerCase()
@@ -30,6 +32,7 @@ export function BookAppointmentModal() {
     setQuery('')
     setPatientId('')
     setDentistId('')
+    setOperatoryId('op-1')
     setTime('')
     setTreatment('')
     setEmergency(false)
@@ -37,13 +40,29 @@ export function BookAppointmentModal() {
     setError('')
   }
 
-  function submit() {
+  async function submit() {
     if (!patientId || !date || !dentistId || !time || !treatment) {
       setError('Please complete patient, date, dentist, time, and treatment.')
       return
     }
-    bookAppointment({ patientId, dentistId, date, time, treatment, notes, emergency })
-    notify('Appointment booked.')
+    setSubmitting(true)
+    setError('')
+    const err = await bookAppointment({
+      patientId,
+      dentistId,
+      operatoryId,
+      date,
+      time,
+      treatment,
+      notes,
+      emergency,
+    })
+    setSubmitting(false)
+    if (err) {
+      setError(err)
+      return
+    }
+    notify('Appointment booked successfully.')
     reset()
     setBookOpen(false)
   }
@@ -151,6 +170,19 @@ export function BookAppointmentModal() {
               </select>
             </div>
           </label>
+
+          <label className="block sm:col-span-2">
+            <span className="mb-1.5 block text-sm font-semibold text-slate-700">Operatory Dental Chair</span>
+            <select
+              value={operatoryId}
+              onChange={(e) => setOperatoryId(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 py-2.5 px-3 text-sm outline-none focus:border-[#2563EB]"
+            >
+              <option value="op-1">Chair 1 (Operatory A) — General Dentistry</option>
+              <option value="op-2">Chair 2 (Operatory B) — Oral Surgery & Implants</option>
+              <option value="op-3">Hygiene Bay — Prophylaxis & Scaling</option>
+            </select>
+          </label>
         </div>
 
         <div className="rounded-xl bg-slate-50 p-4">
@@ -195,10 +227,11 @@ export function BookAppointmentModal() {
         </button>
         <button
           type="button"
+          disabled={submitting}
           onClick={submit}
-          className="rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1D4ED8]"
+          className="rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1D4ED8] disabled:opacity-50"
         >
-          Submit Appointment
+          {submitting ? 'Checking availability...' : 'Submit Appointment'}
         </button>
       </div>
     </Modal>

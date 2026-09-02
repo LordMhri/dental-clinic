@@ -25,6 +25,7 @@ import type {
 interface BookPayload {
   patientId: string
   dentistId: string
+  operatoryId?: string
   date: string
   time: string
   treatment: string
@@ -43,13 +44,15 @@ interface ClinicContextValue {
   invoices: Invoice[]
   bookOpen: boolean
   setBookOpen: (open: boolean) => void
-  bookAppointment: (payload: BookPayload) => void
+  bookAppointment: (payload: BookPayload) => Promise<string | null>
   addPatient: (patient: Patient) => void
   updatePatient: (id: string, patch: Partial<Patient>) => void
-  processPayment: (invoiceId: string, amount: number, method: PaymentMethod) => void
+  processPayment: (invoiceId: string, amount: number, method: PaymentMethod, referenceNumber?: string) => Promise<void>
   updateAppointmentStatus: (id: string, status: Appointment['status']) => void
   rescheduleAppointment: (id: string, date: string, time: string) => void
   createInvoice: (payload: { patientId: string; treatment: string; total: number }) => Invoice
+  refreshAppointments: () => Promise<void>
+  refreshInvoices: () => Promise<void>
   toast: string | null
   notify: (message: string) => void
 }
@@ -172,23 +175,82 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
     [login],
   )
 
-  const bookAppointment = useCallback((payload: BookPayload) => {
-    const id = `ap-${Date.now()}`
-    const next: Appointment = {
-      id,
-      patientId: payload.patientId,
-      dentistId: payload.dentistId,
-      date: payload.date,
-      time: payload.time,
-      endTime: payload.time,
-      durationMins: payload.emergency ? 30 : 45,
-      treatment: payload.treatment,
-      status: payload.emergency ? 'Confirmed' : 'Scheduled',
-      notes: payload.notes,
-      emergency: payload.emergency,
+  const refreshAppointments = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/scheduling/appointments', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.appointments) setAppointments(data.appointments)
+      }
+    } catch {}
+  }, [token])
+
+  const refreshInvoices = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/billing/invoices', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.invoices) setInvoices(data.invoices)
+      }
+    } catch {}
+  }, [token])
+
+  useEffect(() => {
+    if (token) {
+      refreshAppointments()
+      refreshInvoices()
     }
-    setAppointments((prev) => [next, ...prev])
-  }, [])
+  }, [token, refreshAppointments, refreshInvoices])
+
+  const bookAppointment = useCallback(
+    async (payload: BookPayload): Promise<string | null> => {
+      if (token) {
+        try {
+          const res = await fetch('/api/scheduling/appointments', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+          })
+          const data = await res.json()
+          if (!res.ok) {
+            return data.error || 'Failed to book appointment'
+          }
+          setAppointments((prev) => [data.appointment, ...prev])
+          return null
+        } catch {
+          return 'Network error when booking appointment'
+        }
+      }
+      // Offline fallback
+      const id = `ap-${Date.now()}`
+      const next: Appointment = {
+        id,
+        patientId: payload.patientId,
+        dentistId: payload.dentistId,
+        operatoryId: payload.operatoryId,
+        date: payload.date,
+        time: payload.time,
+        endTime: payload.time,
+        durationMins: payload.emergency ? 30 : 45,
+        treatment: payload.treatment,
+        status: payload.emergency ? 'Confirmed' : 'Scheduled',
+        notes: payload.notes,
+        emergency: payload.emergency,
+      }
+      setAppointments((prev) => [next, ...prev])
+      return null
+    },
+    [token],
+  )
 
   const addPatient = useCallback((patient: Patient) => {
     setPatients((prev) => [patient, ...prev])
@@ -199,7 +261,27 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const processPayment = useCallback(
-    (invoiceId: string, amount: number, method: PaymentMethod) => {
+    async (invoiceId: string, amount: number, method: PaymentMethod, referenceNumber?: string) => {
+      if (token) {
+        try {
+          const res = await fetch(`/api/billing/invoices/${invoiceId}/payments`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ amount, method, referenceNumber }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setInvoices((prev) =>
+              prev.map((inv) => (inv.id === invoiceId ? data.invoice : inv)),
+            )
+            return
+          }
+        } catch {}
+      }
+      // Offline fallback
       setInvoices((prev) =>
         prev.map((inv) => {
           if (inv.id !== invoiceId) return inv
@@ -209,18 +291,48 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
         }),
       )
     },
-    [],
+    [token],
   )
 
-  const updateAppointmentStatus = useCallback((id: string, status: Appointment['status']) => {
-    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
-  }, [])
+  const updateAppointmentStatus = useCallback(
+    async (id: string, status: Appointment['status']) => {
+      if (token) {
+        try {
+          await fetch(`/api/scheduling/appointments/${id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ status }),
+          })
+        } catch {}
+      }
+      setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
+    },
+    [token],
+  )
 
-  const rescheduleAppointment = useCallback((id: string, date: string, time: string) => {
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, date, time, endTime: time, status: 'Scheduled' } : a)),
-    )
-  }, [])
+  const rescheduleAppointment = useCallback(
+    async (id: string, date: string, time: string) => {
+      if (token) {
+        try {
+          await fetch(`/api/scheduling/appointments/${id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ date, time }),
+          })
+        } catch {}
+      }
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, date, time, endTime: time, status: 'Scheduled' } : a)),
+      )
+    },
+    [token],
+  )
 
   const createInvoice = useCallback(
     (payload: { patientId: string; treatment: string; total: number }) => {
@@ -258,6 +370,8 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
       updateAppointmentStatus,
       rescheduleAppointment,
       createInvoice,
+      refreshAppointments,
+      refreshInvoices,
       toast,
       notify,
     }),
@@ -271,6 +385,7 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
       appointments,
       invoices,
       bookOpen,
+      setBookOpen,
       bookAppointment,
       addPatient,
       updatePatient,
@@ -278,6 +393,8 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
       updateAppointmentStatus,
       rescheduleAppointment,
       createInvoice,
+      refreshAppointments,
+      refreshInvoices,
       toast,
       notify,
     ],
