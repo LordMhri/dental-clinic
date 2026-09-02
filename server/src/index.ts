@@ -8,6 +8,7 @@ import { patientRouter } from './routes/patient.routes.js'
 import { clinicalRouter } from './routes/clinical.routes.js'
 import { schedulingRouter } from './routes/scheduling.routes.js'
 import { billingRouter } from './routes/billing.routes.js'
+import { inventoryRouter } from './routes/inventory.routes.js'
 import { initStorage } from './lib/storage.js'
 
 dotenv.config()
@@ -32,6 +33,7 @@ app.use('/api/patients', patientRouter)
 app.use('/api/clinical', clinicalRouter)
 app.use('/api/scheduling', schedulingRouter)
 app.use('/api/billing', billingRouter)
+app.use('/api/inventory', inventoryRouter)
 
 // Global 404 handler
 app.use((_req: Request, res: Response) => {
