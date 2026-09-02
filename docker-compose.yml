@@ -1,0 +1,75 @@
+name: sys-core-stack
+
+services:
+  sys-db-service:
+    image: postgres:16-alpine
+    container_name: sys-db-service
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sysadmin
+      POSTGRES_PASSWORD: lewi_secure_pass_2026
+      POSTGRES_DB: dental_clinic_db
+    volumes:
+      - sys-db-data:/var/lib/postgresql/data
+    ports:
+      # Bound to 5433 to strictly avoid any conflict with existing 5432 containers
+      - "127.0.0.1:5433:5432"
+    networks:
+      - sys-isolated-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sysadmin -d dental_clinic_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  sys-storage-service:
+    image: minio/minio:latest
+    container_name: sys-storage-service
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: sysadmin
+      MINIO_ROOT_PASSWORD: lewi_secure_storage_pass_2026
+    volumes:
+      - sys-storage-data:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    networks:
+      - sys-isolated-net
+
+  sys-core-service:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: sys-core-service
+    restart: unless-stopped
+    depends_on:
+      sys-db-service:
+        condition: service_healthy
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://sysadmin:lewi_secure_pass_2026@sys-db-service:5432/dental_clinic_db?schema=public
+      JWT_SECRET: lewi_dental_sys_core_jwt_secret_key_2026_super_secure
+      S3_ENDPOINT: http://sys-storage-service:9000
+      S3_ACCESS_KEY: sysadmin
+      S3_SECRET_KEY: lewi_secure_storage_pass_2026
+      S3_BUCKET: dental-assets
+    volumes:
+      - ./server/dist:/app/dist:ro
+    ports:
+      - "127.0.0.1:5000:5000"
+    networks:
+      - sys-isolated-net
+
+volumes:
+  sys-db-data:
+    name: sys-db-data
+  sys-storage-data:
+    name: sys-storage-data
+
+networks:
+  sys-isolated-net:
+    name: sys-isolated-net
+    driver: bridge

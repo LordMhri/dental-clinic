@@ -1,0 +1,283 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Staff {
+  id              String   @id @default(cuid())
+  username        String   @unique
+  passwordHash    String
+  name            String
+  role            String   // admin, dentist, reception, cashier, nurse
+  title           String
+  email           String
+  phone           String
+  initials        String
+  telegramChatId  String?
+  isActive        Boolean  @default(true)
+
+  // Scoped RBAC domains: none, read, own, all
+  scopePatients   String   @default("read")
+  scopeClinical   String   @default("none")
+  scopeScheduling String   @default("read")
+  scopeBilling    String   @default("none")
+  scopeInventory  String   @default("none")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointments    Appointment[]
+  treatments      TreatmentRecord[]
+  payments        Payment[]
+  drawerSessions  CashDrawerSession[]
+  stockMovements  StockMovement[]
+  auditLogs       AuditLog[]
+
+  @@map("staff")
+}
+
+model Patient {
+  id              String   @id // PT-8421 or cuid
+  name            String
+  initials        String
+  gender          String   // M, F
+  age             Int
+  phone           String
+  email           String?
+  address         String?
+  registeredDate  DateTime @default(now())
+  lastVisitDate   String?
+  status          String   @default("Active") // Active, Follow-up Due, Inactive
+  allergy         String?
+  treatment       String?
+  notes           String?
+  telegramChatId  String?
+  telegramUsername String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointments    Appointment[]
+  treatments      TreatmentRecord[]
+  invoices        Invoice[]
+  dentalCharts    DentalChart[]
+  attachments     PatientAttachment[]
+
+  @@map("patients")
+}
+
+model PatientAttachment {
+  id          String   @id @default(cuid())
+  patientId   String
+  fileName    String
+  fileType    String   @default("xray") // xray, intraoral_photo, lab_slip, consent_pdf
+  s3Key       String
+  contentType String
+  sizeBytes   Int
+  notes       String?
+  uploadedAt  DateTime @default(now())
+
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_attachments")
+}
+
+model Operatory {
+  id           String   @id @default(cuid())
+  name         String   // Chair 1, Chair 2, Surgery Bay
+  type         String   @default("General") // General, Surgery, Hygiene
+  isActive     Boolean  @default(true)
+
+  appointments Appointment[]
+
+  @@map("operatories")
+}
+
+model Appointment {
+  id           String   @id @default(cuid())
+  patientId    String
+  dentistId    String
+  operatoryId  String?
+  date         String   // YYYY-MM-DD
+  time         String   // 09:00 AM
+  endTime      String   // 09:45 AM
+  durationMins Int      @default(45)
+  treatment    String
+  tooth        String?
+  status       String   @default("Scheduled") // Scheduled, Confirmed, Checked-in, In Progress, Completed, Delayed, No-Show, Cancelled
+  notes        String?
+  emergency    Boolean  @default(false)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  patient      Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dentist      Staff      @relation(fields: [dentistId], references: [id])
+  operatory    Operatory? @relation(fields: [operatoryId], references: [id])
+  treatmentRec TreatmentRecord?
+
+  @@map("appointments")
+}
+
+model TreatmentRecord {
+  id            String   @id @default(cuid())
+  patientId     String
+  dentistId     String
+  appointmentId String?  @unique
+  date          String   // YYYY-MM-DD or Aug 10, 2026
+  procedure     String
+  toothNumber   Int?     // 1-32 or FDI 11-48
+  surfaces      String?  // MOD, O, B, L
+  notes         String
+  fee           Float    @default(0)
+  status        String   @default("Completed") // Planned, In Progress, Completed
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dentist       Staff        @relation(fields: [dentistId], references: [id])
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  invoice       Invoice?
+
+  @@map("treatment_records")
+}
+
+model DentalChart {
+  id          String   @id @default(cuid())
+  patientId   String
+  toothNumber Int      // 1-32 permanent teeth index
+  condition   String   @default("Sound") // Sound, Decayed, Restored, Crown, RootCanal, Missing, Implant
+  surfaces    String?  // MOD, B, etc.
+  notes       String?
+
+  updatedAt   DateTime @updatedAt
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, toothNumber])
+  @@map("dental_charts")
+}
+
+model Invoice {
+  id                String   @id // INV-2026-089
+  patientId         String
+  treatmentRecordId String?  @unique
+  treatment         String
+  date              String   // Aug 12, 2026
+  total             Float
+  paid              Float    @default(0)
+  status            String   @default("Unpaid") // Paid, Unpaid, Partial, Overdue
+  method            String?  // Card, Cash, Bank, Telebirr
+  notes             String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  patient           Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  treatmentRecord   TreatmentRecord? @relation(fields: [treatmentRecordId], references: [id])
+  payments          Payment[]
+
+  @@map("invoices")
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  cashierId       String
+  amount          Float
+  method          String   // Card, Cash, Bank, Telebirr
+  referenceNumber String?  // Telebirr / CBE reference
+  notes           String?
+  paidAt          DateTime @default(now())
+
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  cashier         Staff    @relation(fields: [cashierId], references: [id])
+
+  @@map("payments")
+}
+
+model CashDrawerSession {
+  id           String    @id @default(cuid())
+  cashierId    String
+  date         String    // YYYY-MM-DD
+  openedAt     DateTime  @default(now())
+  closedAt     DateTime?
+  openingCash  Float     @default(0)
+  countedCash  Float?
+  expectedCash Float     @default(0)
+  discrepancy  Float     @default(0)
+  status       String    @default("Open") // Open, Closed
+  notes        String?
+
+  cashier      Staff     @relation(fields: [cashierId], references: [id])
+
+  @@map("cash_drawer_sessions")
+}
+
+model InventoryItem {
+  id          String   @id @default(cuid())
+  name        String
+  sku         String   @unique
+  qty         Int
+  unit        String
+  minQty      Int
+  expiry      String?
+  location    String
+  supplierId  String?
+  unitCost    Float    @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  supplier    Supplier?       @relation(fields: [supplierId], references: [id])
+  stockMoves  StockMovement[]
+
+  @@map("inventory_items")
+}
+
+model StockMovement {
+  id        String   @id @default(cuid())
+  itemId    String
+  staffId   String?
+  type      String   // Restock, Dispensed, Disposed, Adjustment
+  qty       String   // +50 boxes, -2 jars
+  reason    String?
+  createdAt DateTime @default(now())
+
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  staff     Staff?        @relation(fields: [staffId], references: [id])
+
+  @@map("stock_movements")
+}
+
+model Supplier {
+  id           String   @id @default(cuid())
+  name         String
+  initials     String
+  nextDelivery String?
+  phone        String?
+  email        String?
+
+  items        InventoryItem[]
+
+  @@map("suppliers")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  staffId   String?
+  action    String   // LOGIN, LOGOUT, CREATE, UPDATE, DELETE, PAYMENT, EXPORT
+  entity    String   // Patient, Invoice, Appointment, etc.
+  entityId  String?
+  details   String?  // JSON formatted details
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  staff     Staff?   @relation(fields: [staffId], references: [id])
+
+  @@map("audit_logs")
+}

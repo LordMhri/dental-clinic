@@ -23,11 +23,16 @@ export function Login() {
   const [forgotOpen, setForgotOpen] = useState(false)
   const [resetUser, setResetUser] = useState('')
 
+  const [loading, setLoading] = useState(false)
+
   if (user) return <Navigate to={homeFor(user.role)} replace />
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault()
-    const err = login(username, password, remember)
+    setError('')
+    setLoading(true)
+    const err = await login(username, password, remember)
+    setLoading(false)
     if (err) {
       setError(err)
       return
@@ -110,9 +115,10 @@ export function Login() {
 
           <button
             type="submit"
-            className="w-full rounded-lg bg-[#2563EB] py-2.5 text-sm font-semibold text-white hover:bg-[#1D4ED8]"
+            disabled={loading}
+            className="w-full rounded-lg bg-[#2563EB] py-2.5 text-sm font-semibold text-white hover:bg-[#1D4ED8] disabled:opacity-60"
           >
-            Login
+            {loading ? 'Authenticating...' : 'Login'}
           </button>
 
           <div className="mt-5 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
@@ -124,11 +130,16 @@ export function Login() {
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => {
-                      login(s.username, s.password, true)
-                      navigate(homeFor(s.role))
+                    disabled={loading}
+                    onClick={async () => {
+                      setLoading(true)
+                      setError('')
+                      const err = await login(s.username, s.password || 'clinic123', true)
+                      setLoading(false)
+                      if (!err) navigate(homeFor(s.role))
+                      else setError(err)
                     }}
-                    className="rounded-full bg-white px-2.5 py-1 font-medium text-[#2563EB] ring-1 ring-slate-200 hover:ring-[#2563EB]"
+                    className="rounded-full bg-white px-2.5 py-1 font-medium text-[#2563EB] ring-1 ring-slate-200 hover:ring-[#2563EB] disabled:opacity-50"
                   >
                     {s.username}
                   </button>

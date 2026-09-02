@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -33,9 +34,10 @@ interface BookPayload {
 
 interface ClinicContextValue {
   user: Staff | null
-  login: (username: string, password: string, remember: boolean) => string | null
+  token: string | null
+  login: (username: string, password: string, remember: boolean) => Promise<string | null>
   logout: () => void
-  switchUser: (staffId: string) => void
+  switchUser: (staffId: string) => Promise<void>
   patients: Patient[]
   appointments: Appointment[]
   invoices: Invoice[]
@@ -54,17 +56,15 @@ interface ClinicContextValue {
 
 const ClinicContext = createContext<ClinicContextValue | null>(null)
 
-const remembered = (() => {
-  try {
-    const id = localStorage.getItem('lewi-user')
-    return staff.find((s) => s.id === id) ?? null
-  } catch {
-    return null
-  }
-})()
-
 export function ClinicProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Staff | null>(remembered)
+  const [token, setToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('lewi-token')
+    } catch {
+      return null
+    }
+  })
+  const [user, setUser] = useState<Staff | null>(null)
   const [patients, setPatients] = useState(seedPatients)
   const [appointments, setAppointments] = useState(seedAppointments)
   const [invoices, setInvoices] = useState(seedInvoices)
@@ -72,35 +72,105 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Restore authenticated session on mount
+  useEffect(() => {
+    if (!token) {
+      // Check legacy local storage fallback
+      const rememberedId = localStorage.getItem('lewi-user')
+      if (rememberedId) {
+        const found = staff.find((s) => s.id === rememberedId)
+        if (found) setUser(found)
+      }
+      return
+    }
+
+    fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          setUser(data.user)
+        } else {
+          setUser(null)
+          setToken(null)
+          localStorage.removeItem('lewi-token')
+        }
+      })
+      .catch(() => {
+        // Fallback to legacy remembered user if offline
+        const rememberedId = localStorage.getItem('lewi-user')
+        if (rememberedId) {
+          const found = staff.find((s) => s.id === rememberedId)
+          if (found) setUser(found)
+        }
+      })
+  }, [token])
+
   const notify = useCallback((message: string) => {
     setToast(message)
     if (toastTimer.current) clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 3200)
   }, [])
 
-  const login = useCallback((username: string, password: string, remember: boolean) => {
-    const found = staff.find(
-      (s) => s.username === username.trim().toLowerCase() && s.password === password,
-    )
-    if (!found) return 'Invalid username or password.'
-    setUser(found)
-    if (remember) localStorage.setItem('lewi-user', found.id)
-    else localStorage.removeItem('lewi-user')
-    return null
-  }, [])
+  const login = useCallback(async (username: string, password: string, remember: boolean) => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        return data.error || 'Invalid username or password.'
+      }
 
-  const logout = useCallback(() => {
-    setUser(null)
-    localStorage.removeItem('lewi-user')
-  }, [])
-
-  const switchUser = useCallback((staffId: string) => {
-    const found = staff.find((s) => s.id === staffId)
-    if (found) {
+      setUser(data.user)
+      setToken(data.token)
+      if (remember) {
+        localStorage.setItem('lewi-token', data.token)
+        localStorage.setItem('lewi-user', data.user.id)
+      } else {
+        localStorage.removeItem('lewi-token')
+        localStorage.removeItem('lewi-user')
+      }
+      return null
+    } catch {
+      // Offline fallback
+      const found = staff.find(
+        (s) => s.username === username.trim().toLowerCase() && s.password === password,
+      )
+      if (!found) return 'Invalid username or password.'
       setUser(found)
-      localStorage.setItem('lewi-user', found.id)
+      if (remember) localStorage.setItem('lewi-user', found.id)
+      return null
     }
   }, [])
+
+  const logout = useCallback(async () => {
+    if (token) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      } catch {}
+    }
+    setUser(null)
+    setToken(null)
+    localStorage.removeItem('lewi-token')
+    localStorage.removeItem('lewi-user')
+  }, [token])
+
+  const switchUser = useCallback(
+    async (staffId: string) => {
+      const target = staff.find((s) => s.id === staffId)
+      if (target) {
+        await login(target.username, 'clinic123', true)
+      }
+    },
+    [login],
+  )
 
   const bookAppointment = useCallback((payload: BookPayload) => {
     const id = `ap-${Date.now()}`
@@ -172,6 +242,7 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       user,
+      token,
       login,
       logout,
       switchUser,
@@ -192,6 +263,7 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
     }),
     [
       user,
+      token,
       login,
       logout,
       switchUser,

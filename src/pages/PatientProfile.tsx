@@ -15,18 +15,63 @@ import { useClinic } from '../context/ClinicContext'
 import { etb } from '../lib/format'
 import { Avatar } from '../components/ui/Avatar'
 import { Badge } from '../components/ui/Badge'
+import { Odontogram } from '../components/odontogram/Odontogram'
+import { DentalAttachments, type AttachmentItem } from '../components/clinical/DentalAttachments'
+import type { ToothData } from '../components/odontogram/odontogramUtils'
 
 export function PatientProfile() {
   const { patientId } = useParams()
   const navigate = useNavigate()
-  const { patients, appointments, invoices, updatePatient, setBookOpen, notify } = useClinic()
+  const { patients, appointments, invoices, updatePatient, setBookOpen, notify, token } = useClinic()
   const patient = patients.find((p) => p.id === patientId)
 
   const [notes, setNotes] = useState(patient?.notes ?? '')
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([])
+  const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
+  const [chart, setChart] = useState<Record<number, ToothData>>(() => {
+    const init: Record<number, ToothData> = {}
+    for (let i = 1; i <= 32; i++) {
+      init[i] = { toothNumber: i, condition: 'Sound', surfaces: null }
+    }
+    return init
+  })
 
   useEffect(() => {
     setNotes(patient?.notes ?? '')
   }, [patient?.id, patient?.notes])
+
+  useEffect(() => {
+    if (!patientId) return
+    fetch(`/api/clinical/odontogram/${patientId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.chart) {
+          const next: Record<number, ToothData> = {}
+          for (let i = 1; i <= 32; i++) {
+            next[i] = { toothNumber: i, condition: 'Sound', surfaces: null }
+          }
+          for (const item of data.chart) {
+            next[item.toothNumber] = item
+          }
+          setChart(next)
+        }
+      })
+      .catch(() => {})
+
+    fetch(`/api/patients/${patientId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.patient?.attachments) {
+          setAttachments(data.patient.attachments)
+        }
+      })
+      .catch(() => {})
+  }, [patientId, token])
+
   const history = historySeed.filter((t) => t.patientId === patientId)
   const visits = appointments.filter((a) => a.patientId === patientId)
   const bills = invoices.filter((i) => i.patientId === patientId)
@@ -113,6 +158,26 @@ export function PatientProfile() {
         </div>
       </div>
 
+      {/* Visual Odontogram Chart (Read-Only) */}
+      <Odontogram
+        chart={chart}
+        selectedTooth={selectedTooth}
+        selectedSurfaces={[]}
+        onSelectTooth={setSelectedTooth}
+        onToggleSurface={() => {}}
+        onUpdateCondition={() => {}}
+        readOnly={true}
+      />
+
+      {/* Dental Radiographs & Photos (MinIO S3 Integration) */}
+      <DentalAttachments
+        patientId={patient.id}
+        attachments={attachments}
+        onUploadSuccess={(newAtt) => setAttachments((prev) => [newAtt, ...prev])}
+        onDeleteSuccess={(deletedId) => setAttachments((prev) => prev.filter((a) => a.id !== deletedId))}
+        token={token}
+      />
+
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
           <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-800">
@@ -157,7 +222,9 @@ export function PatientProfile() {
                     <div className="text-xs text-slate-400">{r.date}</div>
                     <div className="font-semibold text-slate-800">{r.procedure}</div>
                     <p className="text-sm text-slate-500">{r.notes}</p>
-                    <p className="text-xs text-slate-400">{r.dentist}</p>
+                    <p className="text-xs text-slate-400">
+                      {typeof r.dentist === 'object' ? r.dentist?.name : r.dentist}
+                    </p>
                   </button>
                 </li>
               ))}

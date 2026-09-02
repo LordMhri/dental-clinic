@@ -14,6 +14,9 @@ export type InvoiceStatus = 'Paid' | 'Unpaid' | 'Partial' | 'Overdue'
 export type PaymentMethod = 'Card' | 'Cash' | 'Bank' | 'Telebirr'
 export type StockMoveType = 'Restock' | 'Dispensed' | 'Disposed'
 
+export type ScopeDomain = 'patients' | 'clinical' | 'scheduling' | 'billing' | 'inventory'
+export type ScopeLevel = 'none' | 'read' | 'own' | 'all'
+
 export interface Staff {
   id: string
   name: string
@@ -22,8 +25,9 @@ export interface Staff {
   email: string
   phone: string
   username: string
-  password: string
+  password?: string
   initials: string
+  scopes?: Record<ScopeDomain, ScopeLevel>
 }
 
 export interface Patient {
@@ -96,8 +100,12 @@ export interface TreatmentRecord {
   patientId: string
   date: string
   procedure: string
+  toothNumber?: number | null
+  surfaces?: string | null
   notes: string
-  dentist: string
+  dentist?: string | { id: string; name: string }
+  fee?: number
+  status?: string
 }
 
 export interface Activity {
