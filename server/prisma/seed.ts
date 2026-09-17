@@ -452,7 +452,8 @@ async function main() {
       total: 1800,
       paid: 1800,
       status: 'Paid',
-      method: 'Telebirr',
+      method: 'Transfer',
+      transferChannel: 'Telebirr',
     },
     {
       id: 'INV-2026-086',
@@ -486,7 +487,8 @@ async function main() {
       invoiceId: 'INV-2026-087',
       cashierId: 'st-5',
       amount: 1800,
-      method: 'Telebirr',
+      method: 'Transfer',
+      transferChannel: 'Telebirr',
       referenceNumber: 'TB-99281726',
       notes: 'Telebirr mobile payment confirmation received',
     },
@@ -503,6 +505,60 @@ async function main() {
     await prisma.supplier.create({ data: sup })
   }
 
+  const categoryTree = [
+    {
+      id: 'ortho',
+      name: 'Orthodontics (Braces)',
+      children: [
+        {
+          id: 'ortho-wires',
+          name: 'Archwires',
+          children: [
+            { id: 'ortho-wires-niti', name: 'NiTi Round' },
+            { id: 'ortho-wires-ss', name: 'Stainless Steel' },
+          ],
+        },
+        { id: 'ortho-brackets', name: 'Brackets' },
+        { id: 'ortho-elastics', name: 'Elastics & Power Chains' },
+        { id: 'ortho-adhesives', name: 'Adhesives & Primers' },
+      ],
+    },
+    {
+      id: 'restorative',
+      name: 'Restorative & Fillings',
+      children: [
+        { id: 'rest-composite', name: 'Composite Resins' },
+        { id: 'rest-bonding', name: 'Bonding & Etchants' },
+        { id: 'rest-cements', name: 'Glass Ionomer (GIC) & Cements' },
+      ],
+    },
+    {
+      id: 'anesthetics',
+      name: 'Anesthetics & Pharmaceuticals',
+      children: [
+        { id: 'anes-local', name: 'Local Anesthetics (Lidocaine/Articaine)' },
+        { id: 'anes-needles', name: 'Dental Needles (27G/30G)' },
+        { id: 'anes-topical', name: 'Topical Numbing Gels' },
+      ],
+    },
+    {
+      id: 'infection-control',
+      name: 'Infection Control & Disposables',
+      children: [
+        { id: 'inf-ppe', name: 'Gloves & PPE' },
+        { id: 'inf-barriers', name: 'Patient Bibs & Barriers' },
+        { id: 'inf-pouches', name: 'Autoclave Sterilization Pouches' },
+      ],
+    },
+  ]
+
+  await prisma.inventoryCategoryTree.upsert({
+    where: { id: 'default' },
+    create: { id: 'default', tree: categoryTree as any },
+    update: { tree: categoryTree as any },
+  })
+  console.log('✅ Seeded Centralized Inventory Category Tree.')
+
   const inventoryData = [
     {
       id: 'inv-1',
@@ -514,6 +570,9 @@ async function main() {
       location: 'Operatory 1',
       supplierId: 'sup-2',
       unitCost: 350,
+      categoryId: 'inf-ppe',
+      categoryPath: ['Infection Control & Disposables', 'Gloves & PPE'],
+      attributes: { size: 'M', material: 'Latex' },
     },
     {
       id: 'inv-2',
@@ -526,6 +585,9 @@ async function main() {
       location: 'Pharmacy Cabinet',
       supplierId: 'sup-1',
       unitCost: 85,
+      categoryId: 'anes-local',
+      categoryPath: ['Anesthetics & Pharmaceuticals', 'Local Anesthetics (Lidocaine/Articaine)'],
+      attributes: { concentration: '2%', epinephrine: '1:100,000' },
     },
     {
       id: 'inv-3',
@@ -537,6 +599,9 @@ async function main() {
       location: 'Sterile Store',
       supplierId: 'sup-1',
       unitCost: 1200,
+      categoryId: 'anes-local',
+      categoryPath: ['Anesthetics & Pharmaceuticals', 'Local Anesthetics (Lidocaine/Articaine)'],
+      attributes: { volume: '1.8ml' },
     },
     {
       id: 'inv-4',
@@ -549,6 +614,9 @@ async function main() {
       location: 'Operatory 2',
       supplierId: 'sup-3',
       unitCost: 850,
+      categoryId: 'rest-composite',
+      categoryPath: ['Restorative & Fillings', 'Composite Resins'],
+      attributes: { shade: 'A2', cure: 'Light-cure' },
     },
     {
       id: 'inv-5',
@@ -560,6 +628,9 @@ async function main() {
       location: 'Storage Room B',
       supplierId: 'sup-2',
       unitCost: 280,
+      categoryId: 'inf-barriers',
+      categoryPath: ['Infection Control & Disposables', 'Patient Bibs & Barriers'],
+      attributes: { color: 'Blue', ply: '3-ply' },
     },
     {
       id: 'inv-6',
@@ -571,13 +642,75 @@ async function main() {
       location: 'Central Store',
       supplierId: 'sup-2',
       unitCost: 420,
+      categoryId: 'inf-ppe',
+      categoryPath: ['Infection Control & Disposables', 'Gloves & PPE'],
+      attributes: { size: 'L', material: 'Nitrile', powderFree: true },
+    },
+    {
+      id: 'inv-7',
+      name: '0.016 NiTi Round Upper Archwire',
+      sku: 'WIRE-NT16U',
+      qty: 25,
+      unit: 'packs',
+      minQty: 10,
+      location: 'Operatory 2 (Ortho)',
+      supplierId: 'sup-3',
+      unitCost: 480,
+      categoryId: 'ortho-wires-niti',
+      categoryPath: ['Orthodontics (Braces)', 'Archwires', 'NiTi Round'],
+      attributes: { size: '0.016', arch: 'Upper', material: 'Superelastic NiTi' },
+    },
+    {
+      id: 'inv-8',
+      name: 'Metal Brackets MBT 0.022 Kit',
+      sku: 'BRK-MBT22',
+      qty: 14,
+      unit: 'kits',
+      minQty: 5,
+      location: 'Operatory 2 (Ortho)',
+      supplierId: 'sup-3',
+      unitCost: 1450,
+      categoryId: 'ortho-brackets',
+      categoryPath: ['Orthodontics (Braces)', 'Brackets'],
+      attributes: { slot: '0.022', prescription: 'MBT', hook: '3-4-5' },
+    },
+    {
+      id: 'inv-9',
+      name: 'Orthodontic Power Chain (Silver)',
+      sku: 'CHAIN-SLV',
+      qty: 8,
+      unit: 'rolls',
+      minQty: 3,
+      location: 'Operatory 2 (Ortho)',
+      supplierId: 'sup-3',
+      unitCost: 320,
+      categoryId: 'ortho-elastics',
+      categoryPath: ['Orthodontics (Braces)', 'Elastics & Power Chains'],
+      attributes: { color: 'Silver', spacing: 'Continuous' },
     },
   ]
 
   for (const item of inventoryData) {
     await prisma.inventoryItem.create({ data: item })
   }
-  console.log(`✅ Seeded ${inventoryData.length} inventory items.`)
+  console.log(`✅ Seeded ${inventoryData.length} inventory items with category hierarchy.`)
+
+  // 8. Clinic Profile
+  await prisma.clinicProfile.deleteMany()
+  await prisma.clinicProfile.create({
+    data: {
+      id: 'clinic-primary',
+      name: 'Lewi Dental Clinic',
+      tagline: 'Clinical Excellence',
+      location: 'Bole Sub-City, Woreda 03, Addis Ababa, Ethiopia',
+      phone: '+251 911 123 456',
+      tinNumber: '0048291042',
+      workingHours: 'Mon–Sat · 8:00 AM – 6:00 PM (EAT)',
+      currency: 'ETB',
+      enabledModules: ['patients', 'clinical', 'scheduling', 'billing', 'inventory'],
+    },
+  })
+  console.log('✅ Seeded primary clinic profile and enabled modules.')
 
   console.log('🎉 Database seed completed successfully!')
 }

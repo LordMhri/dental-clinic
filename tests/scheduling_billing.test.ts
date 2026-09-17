@@ -129,5 +129,59 @@ describe('Sprint 3: Operatory Scheduling & Cashier Desk Reconciliation', () => {
       expect(body.session.status).toBe('Closed')
       expect(body.discrepancy).toBe(0)
     })
+
+    it('POST /api/billing/invoices/:id/payments processes Transfer payment with custom bank channel (Dashen Bank) and TXN ref', async () => {
+      const getRes = await fetch(`${API_BASE}/api/billing/invoices`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const { invoices } = await getRes.json()
+      const targetInvoice = invoices.find((i: { status: string }) => i.status !== 'Paid') || invoices[0]
+
+      const payRes = await fetch(`${API_BASE}/api/billing/invoices/${targetInvoice.id}/payments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: 500,
+          method: 'Transfer',
+          transferChannel: 'Dashen Bank',
+          referenceNumber: 'DASH-TXN-998822',
+          notes: 'Customer transferred via Dashen Amole / mobile app',
+        }),
+      })
+
+      expect(payRes.status).toBe(201)
+      const payBody = await payRes.json()
+      expect(payBody.payment).toBeDefined()
+      expect(payBody.payment.method).toBe('Transfer')
+      expect(payBody.payment.transferChannel).toBe('Dashen Bank')
+      expect(payBody.payment.referenceNumber).toBe('DASH-TXN-998822')
+      expect(payBody.invoice.method).toBe('Transfer')
+      expect(payBody.invoice.transferChannel).toBe('Dashen Bank')
+    })
+
+    it('POST /api/billing/invoices/:id/payments strictly enforces Cash and Transfer methods (HTTP 400 for others)', async () => {
+      const getRes = await fetch(`${API_BASE}/api/billing/invoices`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const { invoices } = await getRes.json()
+      const targetInvoice = invoices[0]
+
+      const payRes = await fetch(`${API_BASE}/api/billing/invoices/${targetInvoice.id}/payments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: 100,
+          method: 'Card', // Deprecated / disallowed; only Cash and Transfer permitted
+        }),
+      })
+
+      expect(payRes.status).toBe(400)
+    })
   })
 })

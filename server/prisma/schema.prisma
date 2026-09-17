@@ -171,7 +171,8 @@ model Invoice {
   total             Float
   paid              Float    @default(0)
   status            String   @default("Unpaid") // Paid, Unpaid, Partial, Overdue
-  method            String?  // Card, Cash, Bank, Telebirr
+  method            String?  // Cash, Transfer
+  transferChannel   String?  // Telebirr, Dashen, Abyssinia, CBE, etc.
   notes             String?
 
   createdAt         DateTime @default(now())
@@ -189,7 +190,8 @@ model Payment {
   invoiceId       String
   cashierId       String
   amount          Float
-  method          String   // Card, Cash, Bank, Telebirr
+  method          String   // Cash, Transfer
+  transferChannel String?  // Telebirr, Dashen, Abyssinia, CBE, etc.
   referenceNumber String?  // Telebirr / CBE reference
   notes           String?
   paidAt          DateTime @default(now())
@@ -219,24 +221,35 @@ model CashDrawerSession {
 }
 
 model InventoryItem {
-  id          String   @id @default(cuid())
-  name        String
-  sku         String   @unique
-  qty         Int
-  unit        String
-  minQty      Int
-  expiry      String?
-  location    String
-  supplierId  String?
-  unitCost    Float    @default(0)
+  id           String   @id @default(cuid())
+  name         String
+  sku          String   @unique
+  qty          Int
+  unit         String
+  minQty       Int
+  expiry       String?
+  location     String
+  supplierId   String?
+  unitCost     Float    @default(0)
+  categoryId   String?
+  categoryPath String[] @default([])
+  attributes   Json?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  supplier    Supplier?       @relation(fields: [supplierId], references: [id])
-  stockMoves  StockMovement[]
+  supplier     Supplier?       @relation(fields: [supplierId], references: [id])
+  stockMoves   StockMovement[]
 
   @@map("inventory_items")
+}
+
+model InventoryCategoryTree {
+  id        String   @id @default("default")
+  tree      Json
+  updatedAt DateTime @updatedAt
+
+  @@map("inventory_category_trees")
 }
 
 model StockMovement {
@@ -280,4 +293,19 @@ model AuditLog {
   staff     Staff?   @relation(fields: [staffId], references: [id])
 
   @@map("audit_logs")
+}
+
+model ClinicProfile {
+  id             String   @id
+  name           String
+  tagline        String?
+  location       String?
+  phone          String?
+  tinNumber      String?
+  workingHours   String?
+  currency       String?
+  enabledModules Json
+  updatedAt      DateTime @updatedAt
+
+  @@map("clinic_profiles")
 }

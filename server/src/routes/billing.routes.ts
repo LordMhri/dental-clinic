@@ -94,7 +94,8 @@ billingRouter.get(
 
 const processPaymentSchema = z.object({
   amount: z.number().positive('Payment amount must be greater than 0'),
-  method: z.enum(['Cash', 'Telebirr', 'CBE', 'Bank', 'Card']),
+  method: z.enum(['Cash', 'Transfer']),
+  transferChannel: z.string().optional().nullable(),
   referenceNumber: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 })
@@ -113,7 +114,7 @@ billingRouter.post(
         return
       }
 
-      const { amount, method, referenceNumber, notes } = parsed.data
+      const { amount, method, transferChannel, referenceNumber, notes } = parsed.data
       const cashierId = req.user?.id || 'st-4' // Salem cashier default
 
       const invoice = await prisma.invoice.findUnique({
@@ -138,6 +139,7 @@ billingRouter.post(
             cashierId,
             amount,
             method,
+            transferChannel: method === 'Transfer' ? transferChannel || 'Telebirr' : null,
             referenceNumber: referenceNumber || null,
             notes: notes || null,
           },
@@ -149,24 +151,28 @@ billingRouter.post(
             paid: newPaid,
             status: newStatus,
             method,
+            transferChannel: method === 'Transfer' ? transferChannel || 'Telebirr' : null,
           },
           include: {
+            payments: {
+              include: { cashier: { select: { id: true, name: true } } },
+              orderBy: { paidAt: 'desc' },
+            },
             patient: true,
-            payments: true,
           },
         })
 
         // If Cash payment, update current active cash drawer session expected cash
         if (method === 'Cash') {
-          const activeSession = await tx.cashDrawerSession.findFirst({
+          const activeDrawer = await tx.cashDrawerSession.findFirst({
             where: { status: 'Open' },
             orderBy: { openedAt: 'desc' },
           })
-          if (activeSession) {
+          if (activeDrawer) {
             await tx.cashDrawerSession.update({
-              where: { id: activeSession.id },
+              where: { id: activeDrawer.id },
               data: {
-                expectedCash: activeSession.expectedCash + amount,
+                expectedCash: activeDrawer.expectedCash + amount,
               },
             })
           }

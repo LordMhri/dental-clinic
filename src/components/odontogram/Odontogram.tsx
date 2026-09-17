@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   universalToFDI,
   getToothName,
@@ -9,11 +9,13 @@ import { ToothCell } from './ToothCell'
 
 interface OdontogramProps {
   chart: Record<number, ToothData>
-  selectedTooth: number | null
+  selectedTooth?: number | null
+  selectedTeeth?: number[]
   selectedSurfaces: string[]
   onSelectTooth: (num: number) => void
+  onSelectMultipleTeeth?: (nums: number[]) => void
   onToggleSurface: (surface: string) => void
-  onUpdateCondition: (toothNumber: number, condition: ToothCondition) => void
+  onUpdateCondition: (toothNumbers: number[], condition: ToothCondition) => void
   readOnly?: boolean
 }
 
@@ -26,55 +28,106 @@ const LOWER_RIGHT = [32, 31, 30, 29, 28, 27, 26, 25]
 export function Odontogram({
   chart,
   selectedTooth,
+  selectedTeeth,
   selectedSurfaces,
   onSelectTooth,
+  onSelectMultipleTeeth,
   onToggleSurface,
   onUpdateCondition,
   readOnly = false,
 }: OdontogramProps) {
   const [notation, setNotation] = useState<'FDI' | 'Universal'>('FDI')
 
+  const activeSelectedTeeth = useMemo(() => {
+    if (selectedTeeth !== undefined) return selectedTeeth
+    if (selectedTooth !== null && selectedTooth !== undefined) return [selectedTooth]
+    return []
+  }, [selectedTeeth, selectedTooth])
+
   function getDisplayNumber(univ: number): number {
     return notation === 'FDI' ? universalToFDI(univ) : univ
   }
 
-  const selectedData = selectedTooth ? chart[selectedTooth] : null
-
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      {/* Header with System Switcher */}
+      {/* Header with System Switcher & Multi-Select Toolbar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
         <div>
-          <h2 className="text-base font-bold text-slate-800">Adult Dental Chart (Odontogram)</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-slate-800">Adult Dental Chart (Odontogram)</h2>
+            {activeSelectedTeeth.length > 0 && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-[#2563EB]">
+                {activeSelectedTeeth.length} selected
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500">
-            Click teeth or surfaces (M, O, D, B, L) to chart procedures and conditions.
+            Click teeth to select multiple, or select surfaces (M, O, D, B, L) to chart procedures.
           </p>
         </div>
 
-        {/* Notation Selector */}
-        <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setNotation('FDI')}
-            className={`rounded-lg px-3 py-1 transition-all ${
-              notation === 'FDI'
-                ? 'bg-white text-[#2563EB] shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            FDI Two-Digit (11–48)
-          </button>
-          <button
-            type="button"
-            onClick={() => setNotation('Universal')}
-            className={`rounded-lg px-3 py-1 transition-all ${
-              notation === 'Universal'
-                ? 'bg-white text-[#2563EB] shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Universal (1–32)
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Multi-Tooth Quick Selection Bar */}
+          {!readOnly && onSelectMultipleTeeth && (
+            <div className="flex items-center gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() =>
+                  onSelectMultipleTeeth(Array.from({ length: 16 }, (_, i) => i + 1))
+                }
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                title="Select all upper teeth (1–16)"
+              >
+                Upper Arch
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onSelectMultipleTeeth(Array.from({ length: 16 }, (_, i) => i + 17))
+                }
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                title="Select all lower teeth (17–32)"
+              >
+                Lower Arch
+              </button>
+              {activeSelectedTeeth.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onSelectMultipleTeeth([])}
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 font-medium text-rose-600 hover:bg-rose-100 transition-colors"
+                  title="Clear tooth selection"
+                >
+                  Clear ({activeSelectedTeeth.length})
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Notation Selector */}
+          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setNotation('FDI')}
+              className={`rounded-lg px-3 py-1 transition-all ${
+                notation === 'FDI'
+                  ? 'bg-white text-[#2563EB] shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              FDI (11–48)
+            </button>
+            <button
+              type="button"
+              onClick={() => setNotation('Universal')}
+              className={`rounded-lg px-3 py-1 transition-all ${
+                notation === 'Universal'
+                  ? 'bg-white text-[#2563EB] shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Universal (1–32)
+            </button>
+          </div>
         </div>
       </div>
 
@@ -93,14 +146,15 @@ export function Odontogram({
               <div className="flex gap-1">
                 {UPPER_RIGHT.map((univ) => {
                   const data = chart[univ]
+                  const isSel = activeSelectedTeeth.includes(univ)
                   return (
                     <ToothCell
                       key={univ}
                       universalNumber={univ}
                       displayNumber={getDisplayNumber(univ)}
                       condition={data?.condition || 'Sound'}
-                      activeSurfaces={selectedTooth === univ ? selectedSurfaces : []}
-                      isSelected={selectedTooth === univ}
+                      activeSurfaces={isSel ? selectedSurfaces : []}
+                      isSelected={isSel}
                       isUpper={true}
                       onSelectTooth={onSelectTooth}
                       onToggleSurface={readOnly ? undefined : onToggleSurface}
@@ -116,14 +170,15 @@ export function Odontogram({
               <div className="flex gap-1">
                 {UPPER_LEFT.map((univ) => {
                   const data = chart[univ]
+                  const isSel = activeSelectedTeeth.includes(univ)
                   return (
                     <ToothCell
                       key={univ}
                       universalNumber={univ}
                       displayNumber={getDisplayNumber(univ)}
                       condition={data?.condition || 'Sound'}
-                      activeSurfaces={selectedTooth === univ ? selectedSurfaces : []}
-                      isSelected={selectedTooth === univ}
+                      activeSurfaces={isSel ? selectedSurfaces : []}
+                      isSelected={isSel}
                       isUpper={true}
                       onSelectTooth={onSelectTooth}
                       onToggleSurface={readOnly ? undefined : onToggleSurface}
@@ -141,14 +196,15 @@ export function Odontogram({
               <div className="flex gap-1">
                 {LOWER_RIGHT.map((univ) => {
                   const data = chart[univ]
+                  const isSel = activeSelectedTeeth.includes(univ)
                   return (
                     <ToothCell
                       key={univ}
                       universalNumber={univ}
                       displayNumber={getDisplayNumber(univ)}
                       condition={data?.condition || 'Sound'}
-                      activeSurfaces={selectedTooth === univ ? selectedSurfaces : []}
-                      isSelected={selectedTooth === univ}
+                      activeSurfaces={isSel ? selectedSurfaces : []}
+                      isSelected={isSel}
                       isUpper={false}
                       onSelectTooth={onSelectTooth}
                       onToggleSurface={readOnly ? undefined : onToggleSurface}
@@ -164,14 +220,15 @@ export function Odontogram({
               <div className="flex gap-1">
                 {LOWER_LEFT.map((univ) => {
                   const data = chart[univ]
+                  const isSel = activeSelectedTeeth.includes(univ)
                   return (
                     <ToothCell
                       key={univ}
                       universalNumber={univ}
                       displayNumber={getDisplayNumber(univ)}
                       condition={data?.condition || 'Sound'}
-                      activeSurfaces={selectedTooth === univ ? selectedSurfaces : []}
-                      isSelected={selectedTooth === univ}
+                      activeSurfaces={isSel ? selectedSurfaces : []}
+                      isSelected={isSel}
                       isUpper={false}
                       onSelectTooth={onSelectTooth}
                       onToggleSurface={readOnly ? undefined : onToggleSurface}
@@ -189,18 +246,54 @@ export function Odontogram({
         </div>
       </div>
 
-      {/* Selected Tooth Surface Controls & Condition Setter */}
-      {selectedTooth && !readOnly && (
+      {/* Selected Teeth Multi-Tooth Controls & Batch Condition Setter */}
+      {activeSelectedTeeth.length > 0 && !readOnly && (
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-bold text-slate-800">
-                Selected: Tooth #{getDisplayNumber(selectedTooth)}{' '}
-                <span className="text-xs font-normal text-slate-500">
-                  ({getToothName(selectedTooth)})
+          <div className="flex flex-col gap-3">
+            {/* Top row: Selected Teeth Badges */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100/80 pb-2.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-700">
+                  {activeSelectedTeeth.length === 1
+                    ? 'Selected Tooth:'
+                    : `Selected Teeth (${activeSelectedTeeth.length}):`}
                 </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {activeSelectedTeeth.map((num) => (
+                    <span
+                      key={num}
+                      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-[#2563EB] shadow-sm ring-1 ring-blue-200"
+                    >
+                      <span>#{getDisplayNumber(num)}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">
+                        ({getToothName(num)})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onSelectTooth(num)}
+                        className="ml-0.5 text-slate-400 hover:text-rose-600"
+                        title={`Deselect tooth #${getDisplayNumber(num)}`}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
+              {onSelectMultipleTeeth && activeSelectedTeeth.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => onSelectMultipleTeeth([])}
+                  className="text-xs font-medium text-slate-500 hover:text-rose-600 transition-colors"
+                >
+                  Clear Selection
+                </button>
+              )}
+            </div>
+
+            {/* Bottom row: Surfaces and Batch Condition Setter */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-slate-600">
                 <span className="font-semibold">Surfaces:</span>
                 {['M', 'O', 'D', 'B', 'L'].map((s) => {
                   const active = selectedSurfaces.includes(s)
@@ -212,7 +305,7 @@ export function Odontogram({
                       className={`h-6 w-6 rounded font-bold transition-colors ${
                         active
                           ? 'bg-[#2563EB] text-white shadow-sm'
-                          : 'bg-white text-slate-700 hover:bg-blue-100'
+                          : 'bg-white text-slate-700 hover:bg-blue-100 ring-1 ring-slate-200'
                       }`}
                     >
                       {s}
@@ -225,38 +318,42 @@ export function Odontogram({
                   </span>
                 )}
               </div>
-            </div>
 
-            {/* Quick Condition Setter */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-semibold text-slate-600">Set Condition:</span>
-              {(
-                [
-                  'Sound',
-                  'Decayed',
-                  'Restored',
-                  'Crown',
-                  'RootCanal',
-                  'Missing',
-                  'Implant',
-                ] as ToothCondition[]
-              ).map((cond) => {
-                const isCurrent = selectedData?.condition === cond
-                return (
-                  <button
-                    key={cond}
-                    type="button"
-                    onClick={() => onUpdateCondition(selectedTooth, cond)}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                      isCurrent
-                        ? 'bg-[#2563EB] text-white shadow-sm'
-                        : 'bg-white text-slate-700 hover:bg-slate-100 ring-1 ring-slate-200'
-                    }`}
-                  >
-                    {cond}
-                  </button>
-                )
-              })}
+              {/* Quick Condition Setter (Applies to all selected teeth simultaneously) */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-600">
+                  {activeSelectedTeeth.length === 1
+                    ? 'Set Condition:'
+                    : `Set Condition (${activeSelectedTeeth.length} teeth):`}
+                </span>
+                {(
+                  [
+                    'Sound',
+                    'Decayed',
+                    'Restored',
+                    'Crown',
+                    'RootCanal',
+                    'Missing',
+                    'Implant',
+                  ] as ToothCondition[]
+                ).map((cond) => {
+                  const isAll = activeSelectedTeeth.every((t) => chart[t]?.condition === cond)
+                  return (
+                    <button
+                      key={cond}
+                      type="button"
+                      onClick={() => onUpdateCondition(activeSelectedTeeth, cond)}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+                        isAll
+                          ? 'bg-[#2563EB] text-white shadow-sm'
+                          : 'bg-white text-slate-700 hover:bg-slate-100 ring-1 ring-slate-200'
+                      }`}
+                    >
+                      {cond}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
         </div>

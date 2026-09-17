@@ -145,7 +145,7 @@ function Chart({
   const { token, user } = useClinic()
   const [records, setRecords] = useState<TreatmentRecord[]>([])
   const [activeVisit, setActiveVisit] = useState<string | null>(visitId)
-  const [selectedTooth, setSelectedTooth] = useState<number>(14)
+  const [selectedTeeth, setSelectedTeeth] = useState<number[]>([14])
   const [selectedSurfaces, setSelectedSurfaces] = useState<string[]>(['O'])
   const [procedure, setProcedure] = useState<string>(
     patient.treatment ?? treatmentsCatalog[2], // Composite Restoration default
@@ -215,6 +215,13 @@ function Chart({
     fetchPatientDetails()
   }, [fetchChart, fetchPatientDetails])
 
+  // Toggle tooth selection
+  function handleToggleTooth(num: number) {
+    setSelectedTeeth((prev) =>
+      prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num].sort((a, b) => a - b),
+    )
+  }
+
   // Toggle surface selection
   function handleToggleSurface(surface: string) {
     setSelectedSurfaces((prev) =>
@@ -222,8 +229,9 @@ function Chart({
     )
   }
 
-  // Update tooth condition directly in backend & state
-  async function handleUpdateCondition(toothNumber: number, condition: ToothCondition) {
+  // Update tooth conditions directly in backend & state
+  async function handleUpdateCondition(toothNumbers: number[], condition: ToothCondition) {
+    if (toothNumbers.length === 0) return
     try {
       const res = await fetch(`/api/clinical/odontogram/${patient.id}`, {
         method: 'PUT',
@@ -232,22 +240,29 @@ function Chart({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          toothNumber,
+          toothNumbers,
           condition,
           surfaces: selectedSurfaces.join(''),
         }),
       })
 
       if (res.ok) {
-        setChart((prev) => ({
-          ...prev,
-          [toothNumber]: {
-            ...prev[toothNumber],
-            condition,
-            surfaces: selectedSurfaces.join(''),
-          },
-        }))
-        notify(`Tooth #${toothNumber} set to ${condition}.`)
+        setChart((prev) => {
+          const next = { ...prev }
+          for (const t of toothNumbers) {
+            next[t] = {
+              ...next[t],
+              condition,
+              surfaces: selectedSurfaces.join(''),
+            }
+          }
+          return next
+        })
+        notify(
+          toothNumbers.length === 1
+            ? `Tooth #${toothNumbers[0]} set to ${condition}.`
+            : `${toothNumbers.length} teeth (#${toothNumbers.join(', #')}) set to ${condition}.`,
+        )
       }
     } catch {
       notify('Failed to update tooth condition.')
@@ -264,6 +279,10 @@ function Chart({
 
   // Save procedure & trigger anti-leakage cashier draft invoice
   async function handleSaveProcedure() {
+    if (selectedTeeth.length === 0) {
+      notify('Please select at least one tooth before saving procedure.')
+      return
+    }
     setSubmitting(true)
     setSavedSuccess(false)
 
@@ -277,9 +296,14 @@ function Chart({
         body: JSON.stringify({
           patientId: patient.id,
           procedure,
-          toothNumber: selectedTooth,
+          toothNumber: selectedTeeth[0],
+          toothNumbers: selectedTeeth,
           surfaces: selectedSurfaces.join(''),
-          notes: notes || `Treated tooth #${selectedTooth} (${selectedSurfaces.join('')})`,
+          notes:
+            notes ||
+            (selectedTeeth.length === 1
+              ? `Treated tooth #${selectedTeeth[0]} (${selectedSurfaces.join('')})`
+              : `Treated teeth #${selectedTeeth.join(', #')} (${selectedSurfaces.join('')})`),
           fee,
           status: 'Completed',
         }),
@@ -307,7 +331,11 @@ function Chart({
     setNotes(r.notes)
     setDate(toInputDate(r.date))
     const tooth = toothFromNotes(r.notes)
-    if (tooth) setSelectedTooth(tooth)
+    if (tooth) {
+      setSelectedTeeth([tooth])
+    } else if (r.toothNumber) {
+      setSelectedTeeth([r.toothNumber])
+    }
     notify(`Opened ${r.procedure} from ${r.date}.`)
   }
 
@@ -346,9 +374,10 @@ function Chart({
       {/* 1. Interactive Anatomical Odontogram */}
       <Odontogram
         chart={chart}
-        selectedTooth={selectedTooth}
+        selectedTeeth={selectedTeeth}
         selectedSurfaces={selectedSurfaces}
-        onSelectTooth={setSelectedTooth}
+        onSelectTooth={handleToggleTooth}
+        onSelectMultipleTeeth={setSelectedTeeth}
         onToggleSurface={handleToggleSurface}
         onUpdateCondition={handleUpdateCondition}
       />
@@ -426,14 +455,20 @@ function Chart({
             </label>
           </div>
 
-          <div className="mb-3 flex items-center gap-2 text-xs text-slate-600">
-            <span className="font-semibold">Selected Tooth:</span>
-            <span className="rounded bg-blue-100 px-2 py-0.5 font-bold text-[#2563EB]">
-              Tooth #{selectedTooth}
-            </span>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className="font-semibold">Selected Teeth:</span>
+            {selectedTeeth.length === 0 ? (
+              <span className="text-slate-400 italic">None selected</span>
+            ) : (
+              <span className="rounded bg-blue-100 px-2 py-0.5 font-bold text-[#2563EB]">
+                {selectedTeeth.length === 1
+                  ? `Tooth #${selectedTeeth[0]}`
+                  : `${selectedTeeth.length} Teeth (#${selectedTeeth.join(', #')})`}
+              </span>
+            )}
             {selectedSurfaces.length > 0 && (
               <>
-                <span className="font-semibold ml-2">Surfaces:</span>
+                <span className="ml-2 font-semibold">Surfaces:</span>
                 <span className="rounded bg-blue-100 px-2 py-0.5 font-bold text-[#2563EB]">
                   {selectedSurfaces.join('')}
                 </span>

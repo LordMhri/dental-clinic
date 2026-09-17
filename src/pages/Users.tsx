@@ -7,8 +7,8 @@ const homes: Record<string, string> = {
   admin: '/dashboard',
   dentist: '/dentist',
   reception: '/reception',
-  cashier: '/cashier',
-  nurse: '/dashboard',
+  cashier: '/billing',
+  nurse: '/inventory',
 }
 
 export function Users() {

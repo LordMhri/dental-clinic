@@ -27,7 +27,13 @@ export function PatientProfile() {
 
   const [notes, setNotes] = useState(patient?.notes ?? '')
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
-  const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
+  const [selectedTeeth, setSelectedTeeth] = useState<number[]>([])
+
+  function handleToggleTooth(num: number) {
+    setSelectedTeeth((prev) =>
+      prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num].sort((a, b) => a - b),
+    )
+  }
   const [chart, setChart] = useState<Record<number, ToothData>>(() => {
     const init: Record<number, ToothData> = {}
     for (let i = 1; i <= 32; i++) {
@@ -161,9 +167,10 @@ export function PatientProfile() {
       {/* Visual Odontogram Chart (Read-Only) */}
       <Odontogram
         chart={chart}
-        selectedTooth={selectedTooth}
+        selectedTeeth={selectedTeeth}
         selectedSurfaces={[]}
-        onSelectTooth={setSelectedTooth}
+        onSelectTooth={handleToggleTooth}
+        onSelectMultipleTeeth={setSelectedTeeth}
         onToggleSurface={() => {}}
         onUpdateCondition={() => {}}
         readOnly={true}

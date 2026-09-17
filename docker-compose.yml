@@ -58,6 +58,7 @@ services:
       S3_BUCKET: dental-assets
     volumes:
       - ./server/dist:/app/dist:ro
+      - ./server/prisma:/app/prisma:ro
     ports:
       - "127.0.0.1:5000:5000"
     networks:

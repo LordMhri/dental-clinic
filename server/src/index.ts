@@ -9,6 +9,7 @@ import { clinicalRouter } from './routes/clinical.routes.js'
 import { schedulingRouter } from './routes/scheduling.routes.js'
 import { billingRouter } from './routes/billing.routes.js'
 import { inventoryRouter } from './routes/inventory.routes.js'
+import { clinicRouter } from './routes/clinic.routes.js'
 import { initStorage } from './lib/storage.js'
 
 dotenv.config()
@@ -29,6 +30,7 @@ app.use(express.json())
 // Route Registration
 app.use('/api', healthRouter)
 app.use('/api/auth', authRouter)
+app.use('/api/clinic', clinicRouter)
 app.use('/api/patients', patientRouter)
 app.use('/api/clinical', clinicalRouter)
 app.use('/api/scheduling', schedulingRouter)

@@ -42,6 +42,42 @@ describe('Backend API Integration Tests (Local sys-core-service & PostgreSQL)', 
     expect(body.patients.length).toBeGreaterThan(0)
   })
 
+  it('POST /api/patients registers a new patient in PostgreSQL with initialized sound odontogram', async () => {
+    const res = await fetch(`${API_BASE}/api/patients`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: 'Kebede Michael',
+        gender: 'M',
+        age: 38,
+        phone: '+251 911 555 777',
+        email: 'kebede.m@example.com',
+        address: 'Bole Medhanialem, Addis Ababa',
+        allergy: 'Penicillin Allergy',
+        notes: 'Walk-in patient for routine checkup and scaling.',
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.patient).toBeDefined()
+    expect(body.patient.name).toBe('Kebede Michael')
+    expect(body.patient.id).toMatch(/^PT-/)
+    expect(body.patient.allergy).toBe('Penicillin Allergy')
+
+    // Verify patient's odontogram was automatically seeded with 32 sound teeth
+    const chartRes = await fetch(`${API_BASE}/api/clinical/odontogram/${body.patient.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    expect(chartRes.status).toBe(200)
+    const chartBody = await chartRes.json()
+    expect(chartBody.chart.length).toBe(32)
+    expect(chartBody.chart.every((t: any) => t.condition === 'Sound')).toBe(true)
+  })
+
   it('GET /api/clinical/odontogram/:patientId returns all 32 adult teeth for patient', async () => {
     const res = await fetch(`${API_BASE}/api/clinical/odontogram/PT-8421`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -73,6 +109,63 @@ describe('Backend API Integration Tests (Local sys-core-service & PostgreSQL)', 
     expect(body.tooth.toothNumber).toBe(14)
     expect(body.tooth.condition).toBe('Decayed')
     expect(body.tooth.surfaces).toBe('MOD')
+  })
+
+  it('PUT /api/clinical/odontogram/:patientId batch updates multiple teeth conditions and surfaces', async () => {
+    const res = await fetch(`${API_BASE}/api/clinical/odontogram/PT-8421`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        toothNumbers: [14, 15, 16],
+        condition: 'Restored',
+        surfaces: 'O',
+        notes: 'Batch restorations placed',
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.tooth.condition).toBe('Restored')
+    expect(body.teeth).toBeDefined()
+    expect(body.teeth.length).toBe(3)
+    expect(body.teeth.map((t: any) => t.toothNumber)).toEqual([14, 15, 16])
+  })
+
+  it('POST /api/clinical/treatments logs procedure across multiple teeth and updates odontogram conditions', async () => {
+    const res = await fetch(`${API_BASE}/api/clinical/treatments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        patientId: 'PT-8421',
+        procedure: 'Composite Restoration (Filling)',
+        toothNumbers: [18, 19],
+        surfaces: 'MO',
+        fee: 3700,
+        notes: 'Restored teeth #18 and #19',
+        status: 'Completed',
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.treatment.procedure).toBe('Composite Restoration (Filling)')
+    expect(body.treatment.fee).toBe(3700)
+
+    // Verify dental chart was updated for both teeth
+    const chartRes = await fetch(`${API_BASE}/api/clinical/odontogram/PT-8421`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const chartData = await chartRes.json()
+    const tooth18 = chartData.chart.find((t: any) => t.toothNumber === 18)
+    const tooth19 = chartData.chart.find((t: any) => t.toothNumber === 19)
+    expect(tooth18?.condition).toBe('Restored')
+    expect(tooth19?.condition).toBe('Restored')
   })
 
   it('POST /api/clinical/treatments logs procedure and stages draft invoice for cashier desk', async () => {

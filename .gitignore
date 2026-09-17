@@ -26,3 +26,6 @@ dist-ssr
 .env*
 !.env.example
 !server/.env.example
+
+# Strategic & business benchmarks
+BUSINESS_SAAS_BENCHMARK.md

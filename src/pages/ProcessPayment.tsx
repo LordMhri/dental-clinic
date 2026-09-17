@@ -2,11 +2,11 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
+  ArrowRightLeft,
   Banknote,
   Building2,
   Check,
   Clock,
-  CreditCard,
   Printer,
   Smartphone,
   CheckCircle2,
@@ -15,21 +15,28 @@ import { useClinic } from '../context/ClinicContext'
 import { etb } from '../lib/format'
 import type { PaymentMethod } from '../types'
 
-const methods: { id: PaymentMethod; label: string; icon: typeof CreditCard; desc: string }[] = [
-  { id: 'Telebirr', label: 'Telebirr', icon: Smartphone, desc: 'Mobile wallet payment' },
-  { id: 'Bank', label: 'CBE / Bank', icon: Building2, desc: 'Commercial Bank of Ethiopia' },
-  { id: 'Cash', label: 'Cash (ETB)', icon: Banknote, desc: 'Physical drawer collection' },
-  { id: 'Card', label: 'POS Card', icon: CreditCard, desc: 'Debit / ATM terminal' },
+const methods: { id: PaymentMethod; label: string; icon: typeof Banknote; desc: string }[] = [
+  { id: 'Cash', label: 'Cash (ETB)', icon: Banknote, desc: 'Physical cash collection & change calculation' },
+  { id: 'Transfer', label: 'Transfer', icon: ArrowRightLeft, desc: 'Telebirr, CBE, Abyssinia, Dashen, etc.' },
+]
+
+const POPULAR_CHANNELS = [
+  { id: 'Telebirr', label: 'Telebirr', icon: Smartphone },
+  { id: 'CBE', label: 'CBE (Commercial Bank)', icon: Building2 },
+  { id: 'Bank of Abyssinia', label: 'Bank of Abyssinia', icon: Building2 },
+  { id: 'Dashen Bank', label: 'Dashen Bank', icon: Building2 },
+  { id: 'Awash Bank', label: 'Awash Bank', icon: Building2 },
 ]
 
 export function ProcessPayment() {
   const { invoiceId } = useParams()
   const navigate = useNavigate()
-  const { invoices, patients, user, processPayment, notify } = useClinic()
+  const { invoices, patients, user, clinic, processPayment, notify } = useClinic()
   const invoice = invoices.find((i) => i.id === invoiceId) ?? invoices.find((i) => i.status !== 'Paid')
   const patient = patients.find((p) => p.id === invoice?.patientId)
 
-  const [method, setMethod] = useState<PaymentMethod>('Telebirr')
+  const [method, setMethod] = useState<PaymentMethod>('Cash')
+  const [transferChannel, setTransferChannel] = useState('Telebirr')
   const [full, setFull] = useState(true)
   const remaining = invoice ? Math.max(0, invoice.total - invoice.paid) : 0
   const [amount, setAmount] = useState(remaining.toFixed(2))
@@ -50,9 +57,11 @@ export function ProcessPayment() {
     if (!invoice || !patient) return
     setSubmitting(true)
     try {
-      await processPayment(invoice.id, Number(amount) || 0, method, ref || undefined)
+      const channel = method === 'Transfer' ? transferChannel.trim() || 'Telebirr' : undefined
+      await processPayment(invoice.id, Number(amount) || 0, method, channel, ref || undefined)
       setDone(true)
-      notify(`Payment of ${etb(Number(amount) || 0)} successfully processed via ${method}.`)
+      const methodLabel = method === 'Transfer' ? `Transfer (${channel})` : 'Cash'
+      notify(`Payment of ${etb(Number(amount) || 0)} successfully processed via ${methodLabel}.`)
     } catch {
       notify('Failed to process payment.')
     } finally {
@@ -63,6 +72,7 @@ export function ProcessPayment() {
   function handlePrintReceipt() {
     if (!invoice || !patient) return
     const paidAmount = Number(amount) || invoice.paid
+    const channelLabel = method === 'Transfer' ? (transferChannel.trim() || 'Telebirr') : ''
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -82,11 +92,10 @@ export function ProcessPayment() {
 </head>
 <body>
   <div class="center">
-    <div class="bold" style="font-size: 16px;">LEWI DENTAL CLINIC</div>
-    <div>Bole Sub-City, Woreda 03</div>
-    <div>Addis Ababa, Ethiopia</div>
-    <div>Tel: +251 911 123 456</div>
-    <div>TIN: 0048291042</div>
+    <div class="bold" style="font-size: 16px;">${(clinic?.name || 'DENTAL CLINIC').toUpperCase()}</div>
+    ${clinic?.location ? `<div>${clinic.location}</div>` : ''}
+    ${clinic?.phone ? `<div>Tel: ${clinic.phone}</div>` : ''}
+    ${clinic?.tinNumber ? `<div>TIN: ${clinic.tinNumber}</div>` : ''}
   </div>
   <div class="divider"></div>
   <div><span class="bold">Receipt #:</span> ${invoice.id}</div>
@@ -105,7 +114,11 @@ export function ProcessPayment() {
     <span class="bold">ETB ${invoice.total.toLocaleString()}</span>
   </div>
   <div class="row">
-    <span>Amount Tendered (${method}):</span>
+    <span>Payment Method:</span>
+    <span class="bold">${method}${channelLabel ? ` (${channelLabel})` : ''}</span>
+  </div>
+  <div class="row">
+    <span>Amount Tendered:</span>
     <span class="bold">ETB ${paidAmount.toLocaleString()}</span>
   </div>
   ${
@@ -113,11 +126,16 @@ export function ProcessPayment() {
       ? `<div class="row"><span>Change Given:</span><span>ETB ${changeDue.toLocaleString()}</span></div>`
       : ''
   }
+  ${
+    method === 'Transfer' && channelLabel
+      ? `<div><span class="bold">Transfer Channel:</span> ${channelLabel}</div>`
+      : ''
+  }
   ${ref ? `<div><span class="bold">Ref / Trans ID:</span> ${ref}</div>` : ''}
   <div class="divider"></div>
   <div class="center" style="margin-top: 12px;">
     <div>*** OFFICIAL RECEIPT ***</div>
-    <div>Thank you for choosing Lewi Dental!</div>
+    <div>Thank you for choosing ${clinic?.name || 'our dental clinic'}!</div>
     <div>Get well soon!</div>
   </div>
 </body>
@@ -158,28 +176,76 @@ export function ProcessPayment() {
           <div>
             <h2 className="text-base font-bold text-slate-800">Select Payment Instrument</h2>
             <p className="text-xs text-slate-500">
-              Support Telebirr wallet, CBE direct transfer, physical Cash, or Card.
+              Select physical Cash (drawer collection) or electronic Transfer (bank app / mobile wallet).
             </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {methods.map((m) => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => setMethod(m.id)}
-                className={`flex flex-col items-center gap-1 rounded-xl border p-3.5 text-center transition-all ${
+                className={`flex flex-col items-center gap-1.5 rounded-xl border p-4 text-center transition-all ${
                   method === m.id
                     ? 'border-[#2563EB] bg-blue-50/80 text-[#2563EB] ring-2 ring-[#2563EB] shadow-sm'
                     : 'border-slate-200 text-slate-600 hover:border-slate-300 bg-white'
                 }`}
               >
                 <m.icon className="h-6 w-6" />
-                <span className="text-xs font-bold">{m.label}</span>
-                <span className="text-[10px] text-slate-400 leading-none">{m.desc}</span>
+                <span className="text-sm font-bold">{m.label}</span>
+                <span className="text-xs text-slate-400">{m.desc}</span>
               </button>
             ))}
           </div>
+
+          {/* If Transfer: Channel Selector & Custom input */}
+          {method === 'Transfer' && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
+                  Transfer Channel / Provider
+                </span>
+                <span className="text-xs text-blue-700">Digital receipt / SMS verification</span>
+              </div>
+
+              {/* Popular quick chips */}
+              <div className="flex flex-wrap gap-2">
+                {POPULAR_CHANNELS.map((ch) => {
+                  const selected = transferChannel === ch.id || transferChannel === ch.label
+                  return (
+                    <button
+                      key={ch.id}
+                      type="button"
+                      onClick={() => setTransferChannel(ch.id)}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
+                        selected
+                          ? 'border-[#2563EB] bg-[#2563EB] text-white shadow-sm'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <ch.icon className="h-3.5 w-3.5" />
+                      {ch.label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Editable Channel Name for any custom bank */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Or specify custom bank / transfer provider:
+                </label>
+                <input
+                  type="text"
+                  value={transferChannel}
+                  onChange={(e) => setTransferChannel(e.target.value)}
+                  placeholder="e.g. Dashen Bank, Bank of Abyssinia, Telebirr, CBE, Awash..."
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-[#2563EB]"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Amount to Pay */}
           <label className="block">
@@ -262,21 +328,17 @@ export function ProcessPayment() {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               <span className="mb-1.5 block font-medium text-slate-600">
-                {method === 'Telebirr'
-                  ? 'Telebirr Transaction Code'
-                  : method === 'Bank'
-                  ? 'CBE Reference / Slip #'
+                {method === 'Transfer'
+                  ? `${transferChannel || 'Transfer'} Transaction / Reference Code`
                   : 'Reference Code (Optional)'}
               </span>
               <input
                 value={ref}
                 onChange={(e) => setRef(e.target.value)}
                 placeholder={
-                  method === 'Telebirr'
-                    ? 'e.g. TL-9821-4412'
-                    : method === 'Bank'
-                    ? 'e.g. CBE-TX-98421'
-                    : 'Transaction ref...'
+                  method === 'Transfer'
+                    ? 'e.g. TL-9821-4412, DASH-84129, CBE-TX-991...'
+                    : 'Receipt / drawer reference...'
                 }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#2563EB]"
               />
@@ -301,7 +363,11 @@ export function ProcessPayment() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              placeholder="e.g. Telebirr SMS confirmed on desk phone..."
+              placeholder={
+                method === 'Transfer'
+                  ? 'e.g. SMS payment confirmation verified on cashier phone...'
+                  : 'e.g. Cash received directly into physical drawer...'
+              }
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#2563EB]"
             />
           </label>

@@ -17,13 +17,22 @@ import {
 } from 'lucide-react'
 import { useClinic } from '../../context/ClinicContext'
 
-const items = [
+import type { ClinicModule } from '../../types'
+
+interface NavItem {
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  module?: ClinicModule
+}
+
+const allItems: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/patients', label: 'Patients', icon: Users },
-  { to: '/appointments', label: 'Appointments', icon: CalendarDays },
-  { to: '/treatments', label: 'Treatments', icon: Stethoscope },
-  { to: '/billing', label: 'Billing', icon: Receipt },
-  { to: '/inventory', label: 'Inventory', icon: Package },
+  { to: '/patients', label: 'Patients', icon: Users, module: 'patients' },
+  { to: '/appointments', label: 'Appointments', icon: CalendarDays, module: 'scheduling' },
+  { to: '/treatments', label: 'Treatments', icon: Stethoscope, module: 'clinical' },
+  { to: '/billing', label: 'Billing', icon: Receipt, module: 'billing' },
+  { to: '/inventory', label: 'Inventory', icon: Package, module: 'inventory' },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/users', label: 'Users', icon: UserCog },
   { to: '/settings', label: 'Settings', icon: Settings },
@@ -36,8 +45,10 @@ export function Sidebar({
   collapsed: boolean
   onToggle: () => void
 }) {
-  const { setBookOpen, logout } = useClinic()
+  const { clinic, isModuleEnabled, setBookOpen, logout } = useClinic()
   const navigate = useNavigate()
+
+  const items = allItems.filter((item) => !item.module || isModuleEnabled(item.module))
 
   return (
     <aside
@@ -54,23 +65,31 @@ export function Sidebar({
         </div>
         {!collapsed && (
           <div className="min-w-0 flex-1">
-            <div className="text-[15px] font-bold leading-tight text-slate-800">Lewi Dental</div>
-            <div className="text-[11px] text-slate-400">Clinical Excellence</div>
+            <div className="truncate text-[15px] font-bold leading-tight text-slate-800" title={clinic?.name}>
+              {clinic?.name || 'Dental Clinic'}
+            </div>
+            {clinic?.tagline && (
+              <div className="truncate text-[11px] text-slate-400" title={clinic.tagline}>
+                {clinic.tagline}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => setBookOpen(true)}
-        title="Book Appointment"
-        className={`mb-5 flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1D4ED8] ${
-          collapsed ? 'px-0' : 'w-full px-3'
-        }`}
-      >
-        <Plus className="h-4 w-4 shrink-0" />
-        {!collapsed && 'Book Appointment'}
-      </button>
+      {isModuleEnabled('scheduling') && (
+        <button
+          type="button"
+          onClick={() => setBookOpen(true)}
+          title="Book Appointment"
+          className={`mb-5 flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1D4ED8] ${
+            collapsed ? 'px-0' : 'w-full px-3'
+          }`}
+        >
+          <Plus className="h-4 w-4 shrink-0" />
+          {!collapsed && 'Book Appointment'}
+        </button>
+      )}
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
         {items.map(({ to, label, icon: Icon }) => (

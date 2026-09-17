@@ -217,10 +217,10 @@ export function Patients() {
       <RegisterModal
         open={open}
         onClose={() => setOpen(false)}
-        onSave={(p) => {
-          addPatient(p)
+        onSave={async (p) => {
+          await addPatient(p)
           setOpen(false)
-          notify(`${p.name} registered.`)
+          notify(`${p.name} registered and saved to clinic records.`)
         }}
       />
     </div>
@@ -271,6 +271,9 @@ function RegisterModal({
   const [age, setAge] = useState('30')
   const [gender, setGender] = useState<'M' | 'F'>('F')
   const [status, setStatus] = useState<PatientStatus>('Active')
+  const [allergy, setAllergy] = useState('')
+  const [address, setAddress] = useState('Bole, Addis Ababa')
+  const [notes, setNotes] = useState('')
 
   function save() {
     if (!name.trim()) return
@@ -282,46 +285,63 @@ function RegisterModal({
       initials,
       gender,
       age: Number(age) || 30,
-      phone,
-      email,
-      registered: 'Aug 12, 2026',
+      phone: phone.trim(),
+      email: email.trim(),
+      address: address.trim(),
+      allergy: allergy.trim(),
+      notes: notes.trim(),
+      registered: 'Today',
       lastVisit: '—',
       status,
     })
     setName('')
     setEmail('')
+    setAllergy('')
+    setNotes('')
   }
 
   return (
     <Modal open={open} onClose={onClose}>
-      <ModalHeader title="Register New Patient" subtitle="Add a record for Lewi Dental Clinic" onClose={onClose} />
-      <div className="grid grid-cols-2 gap-3 px-6 py-5">
-        <label className="col-span-2 block text-sm">
+      <ModalHeader title="Register New Patient" subtitle="Permanent record saved to Lewi Dental Clinic database" onClose={onClose} />
+      <div className="grid grid-cols-2 gap-3 px-6 py-5 max-h-[75vh] overflow-y-auto">
+        <label className="col-span-2 block text-xs">
           <span className="mb-1 block font-semibold text-slate-700">Full name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Abeba Kebede" className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-[#2563EB]" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Abeba Kebede" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#2563EB]" />
         </label>
-        <label className="block text-sm">
+        <label className="block text-xs">
           <span className="mb-1 block font-semibold text-slate-700">Phone</span>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-[#2563EB]" />
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#2563EB]" />
         </label>
-        <label className="block text-sm">
+        <label className="block text-xs">
           <span className="mb-1 block font-semibold text-slate-700">Email</span>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-[#2563EB]" />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="optional" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#2563EB]" />
         </label>
-        <label className="block text-sm">
+        <label className="block text-xs">
           <span className="mb-1 block font-semibold text-slate-700">Age</span>
-          <input value={age} onChange={(e) => setAge(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-[#2563EB]" />
+          <input value={age} onChange={(e) => setAge(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#2563EB]" />
         </label>
-        <label className="block text-sm">
+        <label className="block text-xs">
           <span className="mb-1 block font-semibold text-slate-700">Gender</span>
-          <select value={gender} onChange={(e) => setGender(e.target.value as 'M' | 'F')} className="w-full rounded-lg border border-slate-200 px-3 py-2">
+          <select value={gender} onChange={(e) => setGender(e.target.value as 'M' | 'F')} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs">
             <option value="F">Female</option>
             <option value="M">Male</option>
           </select>
         </label>
-        <label className="col-span-2 block text-sm">
+        <label className="col-span-2 block text-xs">
+          <span className="mb-1 block font-semibold text-slate-700">Medical Alert & Drug Allergies (e.g. Penicillin)</span>
+          <input value={allergy} onChange={(e) => setAllergy(e.target.value)} placeholder="e.g. Penicillin Allergy, Diabetic, Hypertensive" className="w-full rounded-lg border border-rose-200 bg-rose-50/40 px-3 py-2 text-xs outline-none focus:border-rose-400" />
+        </label>
+        <label className="col-span-2 block text-xs">
+          <span className="mb-1 block font-semibold text-slate-700">Residential Address / Sub-City</span>
+          <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. Bole Medhanialem, Addis Ababa" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#2563EB]" />
+        </label>
+        <label className="col-span-2 block text-xs">
+          <span className="mb-1 block font-semibold text-slate-700">Initial Clinical Notes / Chief Complaint</span>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="e.g. Patient complains of lower right molar sensitivity..." className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#2563EB]" />
+        </label>
+        <label className="col-span-2 block text-xs">
           <span className="mb-1 block font-semibold text-slate-700">Status</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value as PatientStatus)} className="w-full rounded-lg border border-slate-200 px-3 py-2">
+          <select value={status} onChange={(e) => setStatus(e.target.value as PatientStatus)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs">
             <option>Active</option>
             <option>Follow-up Due</option>
             <option>Inactive</option>
@@ -329,11 +349,11 @@ function RegisterModal({
         </label>
       </div>
       <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
-        <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm">
+        <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600">
           Cancel
         </button>
-        <button type="button" onClick={save} className="rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-semibold text-white">
-          Save Patient
+        <button type="button" onClick={save} className="rounded-lg bg-[#2563EB] px-4 py-2 text-xs font-semibold text-white hover:bg-[#1D4ED8]">
+          Save to Database
         </button>
       </div>
     </Modal>

@@ -14,7 +14,7 @@ const stored = () => {
 }
 
 export function AppLayout({ searchPlaceholder, title }: { searchPlaceholder?: string; title?: string }) {
-  const { user } = useClinic()
+  const { user, clinic } = useClinic()
   const [collapsed, setCollapsed] = useState(stored)
 
   if (!user) return <Navigate to="/login" replace />
@@ -31,7 +31,11 @@ export function AppLayout({ searchPlaceholder, title }: { searchPlaceholder?: st
     <div className="flex min-h-screen bg-[#F8FAFC]">
       <Sidebar collapsed={collapsed} onToggle={toggle} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header searchPlaceholder={searchPlaceholder} title={title} onMenuClick={toggle} />
+        <Header
+          searchPlaceholder={searchPlaceholder}
+          title={title || clinic?.name || undefined}
+          onMenuClick={toggle}
+        />
         <main className="min-h-0 flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>

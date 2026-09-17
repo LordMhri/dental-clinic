@@ -78,9 +78,9 @@ export function Dashboard() {
           <div className="grid gap-3 sm:grid-cols-2">
             {[
               { label: 'Cash', amount: 4100, count: '12 txns', color: 'bg-emerald-500' },
-              { label: 'Bank Transfer', amount: 6200, count: '5 txns', color: 'bg-blue-500' },
-              { label: 'Telebirr', amount: 2400, count: '8 txns', color: 'bg-sky-500' },
-              { label: 'Card', amount: 2700, count: '4 txns', color: 'bg-indigo-500' },
+              { label: 'Transfer (Telebirr)', amount: 5100, count: '12 txns', color: 'bg-sky-500' },
+              { label: 'Transfer (CBE)', amount: 3800, count: '4 txns', color: 'bg-blue-500' },
+              { label: 'Transfer (Dashen)', amount: 2400, count: '3 txns', color: 'bg-indigo-500' },
             ].map((m) => (
               <div key={m.label} className="rounded-xl border border-slate-100 p-4">
                 <div className="flex items-center justify-between text-sm text-slate-500">

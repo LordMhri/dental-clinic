@@ -64,11 +64,16 @@ export function ToothCell({
       onClick={() => onSelectTooth(universalNumber)}
       className={`group relative flex flex-col items-center cursor-pointer rounded-lg p-1 transition-all ${
         isSelected
-          ? 'bg-blue-50 ring-2 ring-[#2563EB] shadow-sm'
+          ? 'bg-blue-50 ring-2 ring-[#2563EB] shadow-sm scale-105 z-10'
           : 'hover:bg-slate-50'
       }`}
       title={`Tooth #${displayNumber} (${condition})`}
     >
+      {isSelected && (
+        <div className="absolute -top-1 -right-1 z-20 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#2563EB] text-[9px] font-bold text-white shadow ring-1 ring-white">
+          ✓
+        </div>
+      )}
       {/* Top Number Label (Upper Arch: display on top) */}
       {isUpper && (
         <span

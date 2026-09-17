@@ -434,7 +434,8 @@ export const invoices: Invoice[] = [
     total: 1800,
     paid: 1800,
     status: 'Paid',
-    method: 'Telebirr',
+    method: 'Transfer',
+    transferChannel: 'Telebirr',
     time: '08:42 AM',
   },
   {
@@ -456,7 +457,8 @@ export const invoices: Invoice[] = [
     total: 2200,
     paid: 2200,
     status: 'Paid',
-    method: 'Bank',
+    method: 'Transfer',
+    transferChannel: 'CBE',
     time: '11:05 AM',
   },
   {
@@ -477,7 +479,8 @@ export const invoices: Invoice[] = [
     total: 1500,
     paid: 1500,
     status: 'Paid',
-    method: 'Telebirr',
+    method: 'Transfer',
+    transferChannel: 'Telebirr',
     time: '12:40 PM',
   },
 ]

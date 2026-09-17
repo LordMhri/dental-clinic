@@ -6,7 +6,8 @@ import { requireAuth, requireScope } from '../middleware/auth.js'
 export const clinicalRouter = Router()
 
 const updateToothSchema = z.object({
-  toothNumber: z.number().int().min(1).max(32),
+  toothNumber: z.number().int().min(1).max(32).optional(),
+  toothNumbers: z.array(z.number().int().min(1).max(32)).optional(),
   condition: z.enum([
     'Sound',
     'Decayed',
@@ -18,6 +19,8 @@ const updateToothSchema = z.object({
   ]),
   surfaces: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+}).refine((data) => data.toothNumber !== undefined || (data.toothNumbers && data.toothNumbers.length > 0), {
+  message: 'Either toothNumber or toothNumbers must be provided',
 })
 
 const createTreatmentSchema = z.object({
@@ -25,6 +28,7 @@ const createTreatmentSchema = z.object({
   appointmentId: z.string().optional().nullable(),
   procedure: z.string().min(2, 'Procedure name required'),
   toothNumber: z.number().int().min(1).max(32).optional().nullable(),
+  toothNumbers: z.array(z.number().int().min(1).max(32)).optional(),
   surfaces: z.string().optional().nullable(),
   notes: z.string().min(1, 'Clinical notes are required for procedures'),
   fee: z.coerce.number().min(0),
@@ -85,30 +89,40 @@ clinicalRouter.put(
         return
       }
 
-      const { toothNumber, condition, surfaces, notes } = parseResult.data
+      const { toothNumber, toothNumbers, condition, surfaces, notes } = parseResult.data
+      const targetNumbers: number[] = toothNumbers && toothNumbers.length > 0
+        ? toothNumbers
+        : toothNumber !== undefined ? [toothNumber] : []
 
-      const updated = await prisma.dentalChart.upsert({
-        where: {
-          patientId_toothNumber: {
-            patientId,
-            toothNumber,
-          },
-        },
-        create: {
-          patientId,
-          toothNumber,
-          condition,
-          surfaces: surfaces || null,
-          notes: notes || null,
-        },
-        update: {
-          condition,
-          surfaces: surfaces || null,
-          notes: notes || null,
-        },
+      const updatedTeeth = await Promise.all(
+        targetNumbers.map((num) =>
+          prisma.dentalChart.upsert({
+            where: {
+              patientId_toothNumber: {
+                patientId,
+                toothNumber: num,
+              },
+            },
+            create: {
+              patientId,
+              toothNumber: num,
+              condition,
+              surfaces: surfaces || null,
+              notes: notes || null,
+            },
+            update: {
+              condition,
+              surfaces: surfaces || null,
+              notes: notes || null,
+            },
+          })
+        )
+      )
+
+      res.json({
+        tooth: updatedTeeth[0],
+        teeth: updatedTeeth,
       })
-
-      res.json({ tooth: updated })
     } catch (err) {
       console.error('Error updating tooth condition:', err)
       res.status(500).json({ error: 'Failed to update tooth.' })
@@ -132,6 +146,13 @@ clinicalRouter.post(
       const data = parseResult.data
       const dentistId = req.user?.id || 'st-1'
 
+      const targetTeeth: number[] =
+        data.toothNumbers && data.toothNumbers.length > 0
+          ? data.toothNumbers
+          : data.toothNumber
+          ? [data.toothNumber]
+          : []
+
       // 1. Create Treatment Record
       const treatment = await prisma.treatmentRecord.create({
         data: {
@@ -139,7 +160,7 @@ clinicalRouter.post(
           dentistId,
           appointmentId: data.appointmentId || null,
           procedure: data.procedure,
-          toothNumber: data.toothNumber || null,
+          toothNumber: data.toothNumber || (targetTeeth.length > 0 ? targetTeeth[0] : null),
           surfaces: data.surfaces || null,
           notes: data.notes,
           fee: data.fee,
@@ -153,7 +174,7 @@ clinicalRouter.post(
       })
 
       // 2. Automatically update tooth condition in odontogram if applicable
-      if (data.toothNumber && data.status === 'Completed') {
+      if (targetTeeth.length > 0 && data.status === 'Completed') {
         let conditionUpdate: string | null = null
         const procLower = data.procedure.toLowerCase()
 
@@ -166,24 +187,28 @@ clinicalRouter.post(
           conditionUpdate = 'Restored'
 
         if (conditionUpdate) {
-          await prisma.dentalChart.upsert({
-            where: {
-              patientId_toothNumber: {
-                patientId: data.patientId,
-                toothNumber: data.toothNumber,
-              },
-            },
-            create: {
-              patientId: data.patientId,
-              toothNumber: data.toothNumber,
-              condition: conditionUpdate,
-              surfaces: data.surfaces || null,
-            },
-            update: {
-              condition: conditionUpdate,
-              surfaces: data.surfaces || null,
-            },
-          })
+          await Promise.all(
+            targetTeeth.map((tNum) =>
+              prisma.dentalChart.upsert({
+                where: {
+                  patientId_toothNumber: {
+                    patientId: data.patientId,
+                    toothNumber: tNum,
+                  },
+                },
+                create: {
+                  patientId: data.patientId,
+                  toothNumber: tNum,
+                  condition: conditionUpdate,
+                  surfaces: data.surfaces || null,
+                },
+                update: {
+                  condition: conditionUpdate,
+                  surfaces: data.surfaces || null,
+                },
+              }),
+            ),
+          )
         }
       }
 
@@ -191,12 +216,18 @@ clinicalRouter.post(
       // If procedure is completed and has a fee > 0, generate draft invoice for cashier desk
       if (data.status === 'Completed' && data.fee > 0) {
         const invId = `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`
+        const toothDesc =
+          targetTeeth.length === 1
+            ? ` (Tooth #${targetTeeth[0]})`
+            : targetTeeth.length > 1
+            ? ` (Teeth #${targetTeeth.join(', #')})`
+            : ''
         await prisma.invoice.create({
           data: {
             id: invId,
             patientId: data.patientId,
             treatmentRecordId: treatment.id,
-            treatment: `${data.procedure}${data.toothNumber ? ` (Tooth #${data.toothNumber})` : ''}`,
+            treatment: `${data.procedure}${toothDesc}`,
             date: new Date().toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',

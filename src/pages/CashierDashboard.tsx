@@ -18,14 +18,29 @@ export function CashierDashboard() {
   const [closeOpen, setCloseOpen] = useState(false)
   const [closed, setClosed] = useState(false)
 
+  const paidInvoices = invoices.filter((i) => i.status === 'Paid')
+  const totalRevenue = paidInvoices.reduce((s, i) => s + (i.paid || i.total), 0)
+  const cashInvoices = paidInvoices.filter((i) => i.method === 'Cash')
+  const transferInvoices = paidInvoices.filter(
+    (i) => i.method === 'Transfer' || (i.method as string) === 'Bank' || (i.method as string) === 'Telebirr',
+  )
+  const telebirrInvoices = transferInvoices.filter(
+    (i) => i.transferChannel?.toLowerCase().includes('telebirr') || (i.method as string) === 'Telebirr',
+  )
+  const bankTransferInvoices = transferInvoices.filter((i) => !telebirrInvoices.includes(i))
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-emerald-600">
+          <button
+            type="button"
+            onClick={() => navigate('/billing')}
+            className="mb-1 flex items-center gap-2 text-xs font-semibold text-emerald-600 hover:underline"
+          >
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            REGISTER OPEN
-          </div>
+            REGISTER OPEN · Click for Drawer Balancing
+          </button>
           <h1 className="text-2xl font-bold text-slate-800">Cashier Dashboard</h1>
           <p className="mt-1 text-sm text-slate-500">Today's financial overview and active transactions.</p>
         </div>
@@ -45,15 +60,35 @@ export function CashierDashboard() {
 
       <div className="grid gap-4 xl:grid-cols-6">
         <div className="rounded-2xl bg-[#2563EB] p-5 text-white shadow-sm xl:col-span-2">
-          <div className="text-sm text-blue-100">Total Revenue Today</div>
-          <div className="mt-2 text-3xl font-bold">ETB 15,400.00</div>
-          <div className="mt-2 text-sm text-blue-100">↑ +12% vs yesterday</div>
+          <div className="text-sm text-blue-100">Total Revenue Collected</div>
+          <div className="mt-2 text-3xl font-bold">{etb(totalRevenue)}</div>
+          <div className="mt-2 text-sm text-blue-100">{paidInvoices.length} paid invoices</div>
         </div>
         {[
-          { label: 'Cash', amount: 4100, tx: '12 txns', icon: Wallet },
-          { label: 'Bank Transfer', amount: 6200, tx: '5 txns', icon: Landmark },
-          { label: 'Telebirr', amount: 2400, tx: '8 txns', icon: Smartphone },
-          { label: 'Card', amount: 2700, tx: '4 txns', icon: Receipt },
+          {
+            label: 'Physical Cash',
+            amount: cashInvoices.reduce((s, i) => s + (i.paid || i.total), 0),
+            tx: `${cashInvoices.length} drawer txns`,
+            icon: Wallet,
+          },
+          {
+            label: 'Digital Transfer (Total)',
+            amount: transferInvoices.reduce((s, i) => s + (i.paid || i.total), 0),
+            tx: `${transferInvoices.length} electronic txns`,
+            icon: Landmark,
+          },
+          {
+            label: 'Telebirr Wallet',
+            amount: telebirrInvoices.reduce((s, i) => s + (i.paid || i.total), 0),
+            tx: `${telebirrInvoices.length} mobile txns`,
+            icon: Smartphone,
+          },
+          {
+            label: 'Bank Transfer (CBE/Dashen/...)',
+            amount: bankTransferInvoices.reduce((s, i) => s + (i.paid || i.total), 0),
+            tx: `${bankTransferInvoices.length} bank txns`,
+            icon: Receipt,
+          },
         ].map((m) => (
           <div key={m.label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
             <m.icon className="mb-2 h-4 w-4 text-[#2563EB]" />
@@ -177,7 +212,11 @@ export function CashierDashboard() {
                       {inv.id}
                     </button>
                   </td>
-                  <td className="py-3 text-slate-600">{inv.method ?? '—'}</td>
+                  <td className="py-3 text-slate-600">
+                    {inv.method === 'Transfer' && inv.transferChannel
+                      ? `Transfer (${inv.transferChannel})`
+                      : (inv.method ?? '—')}
+                  </td>
                   <td className="py-3 font-semibold">{etb(inv.paid)}</td>
                   <td className="py-3">
                     <Badge status="Paid" />

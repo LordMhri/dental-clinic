@@ -17,6 +17,7 @@ import { Users } from './pages/Users'
 import { Settings } from './pages/Settings'
 import { Support } from './pages/Support'
 import { PatientProfile } from './pages/PatientProfile'
+import { ModuleRouteGuard } from './components/ModuleRouteGuard'
 import { ToastHost } from './components/ui/Toast'
 
 export default function App() {
@@ -25,20 +26,30 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route element={<AppLayout title="Lewi Dental Clinic" />}>
+          <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/dentist" element={<DentistDashboard />} />
             <Route path="/reception" element={<ReceptionDashboard />} />
             <Route path="/cashier" element={<CashierDashboard />} />
           </Route>
           <Route element={<AppLayout searchPlaceholder="Search patients, invoices..." />}>
-            <Route path="/patients" element={<Patients />} />
-            <Route path="/patients/:patientId" element={<PatientProfile />} />
-            <Route path="/appointments" element={<Appointments />} />
-            <Route path="/treatments" element={<Treatments />} />
-            <Route path="/billing" element={<Billing />} />
-            <Route path="/billing/pay/:invoiceId" element={<ProcessPayment />} />
-            <Route path="/inventory" element={<Inventory />} />
+            <Route element={<ModuleRouteGuard module="patients" />}>
+              <Route path="/patients" element={<Patients />} />
+              <Route path="/patients/:patientId" element={<PatientProfile />} />
+            </Route>
+            <Route element={<ModuleRouteGuard module="scheduling" />}>
+              <Route path="/appointments" element={<Appointments />} />
+            </Route>
+            <Route element={<ModuleRouteGuard module="clinical" />}>
+              <Route path="/treatments" element={<Treatments />} />
+            </Route>
+            <Route element={<ModuleRouteGuard module="billing" />}>
+              <Route path="/billing" element={<Billing />} />
+              <Route path="/billing/pay/:invoiceId" element={<ProcessPayment />} />
+            </Route>
+            <Route element={<ModuleRouteGuard module="inventory" />}>
+              <Route path="/inventory" element={<Inventory />} />
+            </Route>
             <Route path="/reports" element={<Reports />} />
             <Route path="/users" element={<Users />} />
             <Route path="/settings" element={<Settings />} />

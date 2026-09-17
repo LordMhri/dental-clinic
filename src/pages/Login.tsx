@@ -8,7 +8,7 @@ import { Modal, ModalHeader } from '../components/ui/Modal'
 function homeFor(role: string) {
   if (role === 'dentist') return '/dentist'
   if (role === 'reception') return '/reception'
-  if (role === 'cashier') return '/cashier'
+  if (role === 'cashier') return '/billing'
   return '/dashboard'
 }
 

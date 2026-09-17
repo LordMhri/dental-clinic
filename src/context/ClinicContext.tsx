@@ -16,6 +16,8 @@ import {
 } from '../data/mock'
 import type {
   Appointment,
+  ClinicModule,
+  ClinicProfile,
   Invoice,
   Patient,
   PaymentMethod,
@@ -45,14 +47,25 @@ interface ClinicContextValue {
   bookOpen: boolean
   setBookOpen: (open: boolean) => void
   bookAppointment: (payload: BookPayload) => Promise<string | null>
-  addPatient: (patient: Patient) => void
-  updatePatient: (id: string, patch: Partial<Patient>) => void
-  processPayment: (invoiceId: string, amount: number, method: PaymentMethod, referenceNumber?: string) => Promise<void>
+  addPatient: (patient: Patient) => Promise<Patient>
+  updatePatient: (id: string, patch: Partial<Patient>) => Promise<void>
+  processPayment: (
+    invoiceId: string,
+    amount: number,
+    method: PaymentMethod,
+    transferChannel?: string,
+    referenceNumber?: string,
+  ) => Promise<void>
   updateAppointmentStatus: (id: string, status: Appointment['status']) => void
   rescheduleAppointment: (id: string, date: string, time: string) => void
   createInvoice: (payload: { patientId: string; treatment: string; total: number }) => Invoice
+  refreshPatients: () => Promise<void>
   refreshAppointments: () => Promise<void>
   refreshInvoices: () => Promise<void>
+  clinic: ClinicProfile | null
+  updateClinicProfile: (patch: Partial<ClinicProfile>) => Promise<void>
+  refreshClinicProfile: () => Promise<void>
+  isModuleEnabled: (mod: ClinicModule) => boolean
   toast: string | null
   notify: (message: string) => void
 }
@@ -71,6 +84,7 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
   const [patients, setPatients] = useState(seedPatients)
   const [appointments, setAppointments] = useState(seedAppointments)
   const [invoices, setInvoices] = useState(seedInvoices)
+  const [clinic, setClinic] = useState<ClinicProfile | null>(null)
   const [bookOpen, setBookOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -175,6 +189,44 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
     [login],
   )
 
+  const refreshPatients = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/patients', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.patients)) {
+          setPatients(
+            data.patients.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              initials: p.initials,
+              gender: p.gender,
+              age: p.age,
+              phone: p.phone,
+              email: p.email || '',
+              address: p.address || '',
+              allergy: p.allergy || '',
+              notes: p.notes || '',
+              status: p.status || 'Active',
+              registered: p.createdAt
+                ? new Date(p.createdAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: '2-digit',
+                    year: 'numeric',
+                  })
+                : 'Aug 12, 2026',
+              lastVisit: p.appointments?.[0]?.date || p.lastVisitDate || '—',
+              treatment: p.treatments?.[0]?.procedure || p.treatment || undefined,
+            })),
+          )
+        }
+      }
+    } catch {}
+  }, [token])
+
   const refreshAppointments = useCallback(async () => {
     if (!token) return
     try {
@@ -201,12 +253,87 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [token])
 
+  const refreshClinicProfile = useCallback(async () => {
+    try {
+      const res = await fetch('/api/clinic/profile')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.profile) setClinic(data.profile)
+      }
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    refreshClinicProfile()
+  }, [refreshClinicProfile])
+
   useEffect(() => {
     if (token) {
+      refreshPatients()
       refreshAppointments()
       refreshInvoices()
     }
-  }, [token, refreshAppointments, refreshInvoices])
+  }, [token, refreshPatients, refreshAppointments, refreshInvoices])
+
+  const updateClinicProfile = useCallback(
+    async (patch: Partial<ClinicProfile>) => {
+      const payload = {
+        name: patch.name || clinic?.name || '',
+        tagline: patch.tagline !== undefined ? patch.tagline : clinic?.tagline || null,
+        location: patch.location !== undefined ? patch.location : clinic?.location || null,
+        phone: patch.phone !== undefined ? patch.phone : clinic?.phone || null,
+        tinNumber: patch.tinNumber !== undefined ? patch.tinNumber : clinic?.tinNumber || null,
+        workingHours: patch.workingHours !== undefined ? patch.workingHours : clinic?.workingHours || null,
+        currency: patch.currency !== undefined ? patch.currency : clinic?.currency || null,
+        enabledModules: patch.enabledModules || clinic?.enabledModules || [
+          'patients',
+          'clinical',
+          'scheduling',
+          'billing',
+          'inventory',
+        ],
+      }
+
+      if (token) {
+        try {
+          const res = await fetch('/api/clinic/profile', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setClinic(data.profile)
+            notify('Clinic settings and module configuration updated.')
+            return
+          } else {
+            const data = await res.json()
+            notify(data.error || 'Failed to update clinic configuration.')
+            return
+          }
+        } catch {}
+      }
+
+      // Offline fallback
+      setClinic((prev) => ({
+        id: prev?.id || 'clinic-primary',
+        ...payload,
+      }))
+      notify('Clinic settings saved locally.')
+    },
+    [token, clinic, notify],
+  )
+
+  const isModuleEnabled = useCallback(
+    (mod: ClinicModule): boolean => {
+      if (!clinic || !clinic.enabledModules) return true
+      return clinic.enabledModules.includes(mod)
+    },
+    [clinic],
+  )
 
   const bookAppointment = useCallback(
     async (payload: BookPayload): Promise<string | null> => {
@@ -252,16 +379,80 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
     [token],
   )
 
-  const addPatient = useCallback((patient: Patient) => {
-    setPatients((prev) => [patient, ...prev])
-  }, [])
+  const addPatient = useCallback(
+    async (patient: Patient): Promise<Patient> => {
+      if (token) {
+        try {
+          const res = await fetch('/api/patients', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: patient.name,
+              gender: patient.gender,
+              age: patient.age,
+              phone: patient.phone,
+              email: patient.email || undefined,
+              address: patient.address || undefined,
+              allergy: patient.allergy || undefined,
+              notes: patient.notes || undefined,
+            }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const created: Patient = {
+              ...patient,
+              id: data.patient.id,
+              registered: new Date().toLocaleDateString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric',
+              }),
+              lastVisit: '—',
+            }
+            setPatients((prev) => [created, ...prev])
+            return created
+          }
+        } catch (err) {
+          console.error('Failed to create patient in PostgreSQL:', err)
+        }
+      }
+      // Offline fallback
+      setPatients((prev) => [patient, ...prev])
+      return patient
+    },
+    [token],
+  )
 
-  const updatePatient = useCallback((id: string, patch: Partial<Patient>) => {
-    setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)))
-  }, [])
+  const updatePatient = useCallback(
+    async (id: string, patch: Partial<Patient>) => {
+      if (token) {
+        try {
+          await fetch(`/api/patients/${id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(patch),
+          })
+        } catch {}
+      }
+      setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+    },
+    [token],
+  )
 
   const processPayment = useCallback(
-    async (invoiceId: string, amount: number, method: PaymentMethod, referenceNumber?: string) => {
+    async (
+      invoiceId: string,
+      amount: number,
+      method: PaymentMethod,
+      transferChannel?: string,
+      referenceNumber?: string,
+    ) => {
       if (token) {
         try {
           const res = await fetch(`/api/billing/invoices/${invoiceId}/payments`, {
@@ -270,7 +461,7 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ amount, method, referenceNumber }),
+            body: JSON.stringify({ amount, method, transferChannel, referenceNumber }),
           })
           if (res.ok) {
             const data = await res.json()
@@ -287,7 +478,7 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
           if (inv.id !== invoiceId) return inv
           const paid = Math.min(inv.total, inv.paid + amount)
           const status = paid >= inv.total ? 'Paid' : paid > 0 ? 'Partial' : inv.status
-          return { ...inv, paid, status, method }
+          return { ...inv, paid, status, method, transferChannel }
         }),
       )
     },
@@ -370,8 +561,13 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
       updateAppointmentStatus,
       rescheduleAppointment,
       createInvoice,
+      refreshPatients,
       refreshAppointments,
       refreshInvoices,
+      clinic,
+      updateClinicProfile,
+      refreshClinicProfile,
+      isModuleEnabled,
       toast,
       notify,
     }),
@@ -393,8 +589,13 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
       updateAppointmentStatus,
       rescheduleAppointment,
       createInvoice,
+      refreshPatients,
       refreshAppointments,
       refreshInvoices,
+      clinic,
+      updateClinicProfile,
+      refreshClinicProfile,
+      isModuleEnabled,
       toast,
       notify,
     ],
